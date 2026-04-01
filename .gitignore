@@ -1,0 +1,5 @@
+test/
+test_output/
+lean4export/
+.zig-cache/*
+zig-out/
