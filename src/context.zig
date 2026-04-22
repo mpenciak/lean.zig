@@ -1,35 +1,16 @@
 const std = @import("std");
 const data = @import("data.zig");
 
-pub const NameContext = struct {
-    map: std.ArrayList(data.Name),
+pub const Context = struct {
+    names: std.ArrayList(data.Name) = .empty,
+    levels: std.ArrayList(data.Level) = .empty,
+    exprs: std.ArrayList(data.Expr) = .empty,
+    decls: std.ArrayList(data.Decl) = .empty,
 
-    pub fn init(allocator: std.mem.Allocator) !NameContext {
-        const name_map: std.ArrayList(data.Name) = try .initCapacity(allocator, 50);
-
-        return .{ .map = name_map };
-    }
-
-    pub fn deinit(self: *NameContext, allocator: std.mem.Allocator) void {
-        self.map.deinit(allocator);
-    }
-};
-
-pub const LevelContext = struct {
-    map: std.ArrayList(data.Level),
-
-    pub fn init(allocator: std.mem.Allocator) !LevelContext {
-        const level_map: std.ArrayList(data.Level) = try .initCapacity(allocator, 50);
-        return .{ .map = level_map };
-    }
-
-    pub fn deinit(self: *LevelContext, allocator: std.mem.Allocator) void {
-        self.map.deinit(allocator);
+    pub fn deinit(self: *Context, gpa: std.mem.Allocator) void {
+        self.names.deinit(gpa);
+        self.levels.deinit(gpa);
+        self.exprs.deinit(gpa);
+        self.decls.deinit(gpa);
     }
 };
-
-pub const ExprContext = struct {};
-
-pub const Decls = struct {};
-
-pub const Context = struct {};

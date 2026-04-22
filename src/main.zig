@@ -1,6 +1,7 @@
 const std = @import("std");
-const json = std.json;
 const root = @import("lean_zig");
+
+const json = std.json;
 
 pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
@@ -15,86 +16,88 @@ pub fn main(init: std.process.Init) !void {
         return;
     };
 
-    const file = try std.Io.Dir.cwd().openFile(io, file_path, .{});
-    defer file.close(io);
+    try processFile(io, gpa, file_path);
 
-    var internal_buffer: [4096]u8 = undefined;
-    var file_reader = file.reader(io, &internal_buffer);
+    // while (try reader.takeDelimiter('\n')) |line| : (idx += 1) {
+    //     const parsed_obj =
+    //         try json.parseFromSlice(json.Value, gpa, line, .{});
+    //     defer parsed_obj.deinit();
+    //
+    //     const kind = root.parser.findKind(parsed_obj.value.object).?;
+    //     std.debug.print("{}\n", .{kind});
+    //     const line_obj = parsed_obj.value;
+    //     const strnameraw =
+    //         json.parseFromValue(root.data.IndexedStrName, gpa, line_obj, .{}) catch continue;
+    //     defer strnameraw.deinit();
+    //     std.debug.print("successfully parsed {}\n", .{strnameraw.value});
+    // }
+}
+
+fn processFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
+    const file = try std.Io.Dir.cwd().openFile(io, path, .{});
+    defer file.close(io); // TODO: Maybe move this somewhere else?
+
+    var buffer: [4098]u8 = undefined;
+    var file_reader = file.reader(io, &buffer);
     const reader = &file_reader.interface;
 
-    var idx: usize = 0;
+    const first_line = try reader.takeDelimiter('\n');
+    const meta_obj = try json.parseFromSlice(root.meta.Header, gpa, first_line.?, .{});
+    defer meta_obj.deinit();
 
-    const first_line = (try reader.takeDelimiter('\n')).?;
+    var line_number: usize = 1;
 
-    const obj =
-        try json.parseFromSlice(root.meta.Header, gpa, first_line, .{});
-    defer obj.deinit();
+    var ctx_arena: std.heap.ArenaAllocator = .init(gpa);
+    defer ctx_arena.deinit();
+    const arena = ctx_arena.allocator();
+    var context: root.context.Context = .{};
 
-    var name_context: root.context.NameContext = try .init(gpa);
-    defer name_context.deinit(gpa);
-    var level_context: root.context.LevelContext = try .init(gpa);
-    defer level_context.deinit(gpa);
-
-    while (try reader.takeDelimiter('\n')) |line| : (idx += 1) {
-        const parsed_obj =
-            try json.parseFromSlice(json.Value, gpa, line, .{});
-        defer parsed_obj.deinit();
-
-        const kind = findKind(parsed_obj.value.object).?;
-        std.debug.print("{}\n", .{kind});
-        const line_obj = parsed_obj.value;
-        const strnameraw =
-            json.parseFromValue(root.data.IndexedStrName, gpa, line_obj, .{}) catch continue;
-        defer strnameraw.deinit();
-        std.debug.print("successfully parsed {}\n", .{strnameraw.value});
+    while (try reader.takeDelimiter('\n')) |line| : (line_number += 1) {
+        try parseLine(arena, gpa, &context, line);
     }
 }
 
-// fn parseLine(line: []u8, allocator: std.mem.Allocator, context: *root.context.Context) !void {}
+// TODO this
+fn handleKind(comptime line_kind: root.parser.LineKind, arena: std.mem.Allocator, context: *root.context.Context, obj: json.Value) !void {
+    const ParserTarget = line_kind.associatedType();
+    const parsed = try json.parseFromValue(ParserTarget, arena, obj, .{});
 
-fn findKind(obj: json.ObjectMap) ?LineKind {
-    var it = obj.iterator();
-    while (it.next()) |entry| {
-        if (std.meta.stringToEnum(LineKind, entry.key_ptr.*)) |k| return k;
-    }
-    return null;
+    const constructor = @tagName(line_kind);
+    const kind = comptime line_kind.toKind();
+    const associated_type = kind.associateData();
+    const value = @field(parsed.value, constructor);
+    const item = @unionInit(associated_type, constructor, value);
+    const ctx_field_name = @tagName(kind) ++ "s";
+
+    try @field(context, ctx_field_name).append(arena, item);
+    std.debug.print("parsed {}: {}\n", .{ line_kind, item });
 }
 
-const LineKind = enum {
-    // Names
-    str,
-    num,
-    // Levels
-    succ,
-    max,
-    imax,
-    param,
-    // Exprs
-    bvar,
-    sort,
-    @"const",
-    app,
-    lam,
-    forallE,
-    letE,
-    proj,
-    natVal,
-    strVal,
-    mdata,
-    // Decls
-    axiom,
-    def,
-    @"opaque",
-    thm,
-    quot,
-    inductive,
-};
+fn parseLine(ctx_arena: std.mem.Allocator, gpa: std.mem.Allocator, context: *root.context.Context, line: []const u8) !void {
+    const parsed_obj = try json.parseFromSlice(json.Value, gpa, line, .{});
+    defer parsed_obj.deinit();
+    const obj = parsed_obj.value;
 
-// fn dispatchLine(
-//     gpa: std.mem.Allocator,
-//     line: []const u8,
-//     names: *NameContext,
-//     levels: *LevelContext,
-//     // exprs: *ExprContext,
-//     // decls: *Decls,
-// ) !void {}
+    const kind = root.parser.findLineKind(obj.object).?;
+    switch (kind) {
+        // // Names
+        // .str => {
+        //     try handleKind(root.data.IndexedStrName, .str, ctx_arena, context, obj);
+        // },
+        // .num => {
+        //     try handleKind(root.data.IndexedNumName, .num, ctx_arena, context, obj);
+        // },
+        // // Levels
+        // .succ => {
+        //     try handleKind(root.data.IndexedSuccLevel, .succ, ctx_arena, context, obj);
+        // },
+        // .max => {
+        //     try handleKind(root.data.IndexedMaxLevel, .max, ctx_arena, context, obj);
+        // },
+        // .imax => {
+        //     try handleKind
+        // },
+        inline else => |k| try handleKind(k, ctx_arena, context, obj),
+        // std.debug.print("{}\n", .{kind}),
+    }
+}

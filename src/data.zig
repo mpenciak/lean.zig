@@ -33,6 +33,15 @@ fn IndexedTag(T: type, comptime tag: []const u8, comptime index_name: []const u8
     return @Struct(layout, backing_integer, &field_names, &field_types, &field_attrs);
 }
 
+fn WrappedTag(T: type, comptime tag: []const u8) type {
+    const layout: std.builtin.Type.ContainerLayout = .auto;
+    const backing_integer = null;
+    const field_name: [1][]const u8 = .{tag};
+    const field_type: [1]type = .{T};
+    const field_attrs: [1]std.builtin.Type.StructField.Attributes = @splat(.{});
+    return @Struct(layout, backing_integer, &field_name, &field_type, &field_attrs);
+}
+
 /// This is the `Name` data structure we'll use outside of the context of parsing
 pub const Name = union(enum) {
     // { "num": { "pre": integer, "i": integer } "in": integer, }
@@ -145,7 +154,7 @@ pub const Expr = union(enum) {
 pub const BinderInfo = enum { default, implicit, strictImplicit, instImplicit };
 
 // These are the parsing targets
-pub const IndexedBvarExpr = IndexedTag(Expr, "bvar", "ie");
+pub const IndexedBVarExpr = IndexedTag(Expr, "bvar", "ie");
 pub const IndexedSortExpr = IndexedTag(Expr, "sort", "ie");
 pub const IndexedConstExpr = IndexedTag(Expr, "const", "ie");
 pub const IndexedAppExpr = IndexedTag(Expr, "app", "ie");
@@ -155,7 +164,7 @@ pub const IndexedLetEExpr = IndexedTag(Expr, "letE", "ie");
 pub const IndexedProjExpr = IndexedTag(Expr, "proj", "ie");
 pub const IndexedNatValExpr = IndexedTag(Expr, "natVal", "ie");
 pub const IndexedStrValExpr = IndexedTag(Expr, "strVal", "ie");
-pub const IndexedMdataExpr = IndexedTag(Expr, "mdata", "ie");
+pub const IndexedMDataExpr = IndexedTag(Expr, "mdata", "ie");
 
 // -----------------------
 // DECLS
@@ -163,103 +172,115 @@ pub const IndexedMdataExpr = IndexedTag(Expr, "mdata", "ie");
 
 /// This is the `Decl` data structure we'll use outside of the context of parsing
 pub const Decl = union(enum) {
-    // {
-    //     "axiom": {
-    //         "name": integer,
-    //         "levelParams": Array<integer>,
-    //         "type": integer,
-    //         "isUnsafe": boolean
-    //     }
-    // }
-    axiom: struct {
-        name: u32,
-        levelParams: []u32,
-        type: u32,
-        isUnsafe: bool,
-    },
-
-    // {
-    //     "def": {
-    //         "name": integer,
-    //         "levelParams": Array<integer>,
-    //         "type": integer,
-    //         "value": integer,
-    //         "hints": "opaque" | "abbrev" | {"regular": integer}
-    //         "safety": "unsafe" | "safe" | "partial"
-    //         "all": Array<integer>
-    //     }
-    // }
-    def: struct {
-        name: u32,
-        levelParams: []u32,
-        type: u32,
-        value: u32,
-        hints: Hints,
-        safety: Safety,
-        all: []u32,
-    },
-
-    // {
-    //     "opaque": {
-    //         "name": integer,
-    //         "levelParams": Array<integer>,
-    //         "type": integer,
-    //         "value": integer,
-    //         "isUnsafe": boolean,
-    //         "all": Array<integer>
-    //     }
-    // }
-    @"opaque": struct {
-        name: u32,
-        levelParams: []u32,
-        type: u32,
-        value: u32,
-        isUnsafe: bool,
-        all: []u32,
-    },
-
-    // {
-    //     "thm": {
-    //         "name": integer,
-    //         "levelParams": Array<integer>,
-    //         "type": integer,
-    //         "value": integer,
-    //         "all": Array<integer>
-    //     }
-    // }
-    thm: struct {
-        name: u32,
-        levelParams: []u32,
-        type: u32,
-        value: u32,
-        all: []u32,
-    },
-
-    // {
-    //     "quot": {
-    //         "name": integer,
-    //         "levelParams": Array<integer>,
-    //         "type": integer,
-    //         "kind": "type" | "ctor" | "lift" | "ind"
-    //     }
-    // }
-    quot: struct {
-        name: u32,
-        levelParams: []u32,
-        type: u32,
-        kind: QuotKind,
-    },
+    axiom: Axiom,
+    def: Def,
+    @"opaque": Opaque,
+    thm: Thm,
+    quot: Quot,
+    inductive: Inductive,
 };
 
-pub const Hints = union(enum) {
+// {
+//     "axiom": {
+//         "name": integer,
+//         "levelParams": Array<integer>,
+//         "type": integer,
+//         "isUnsafe": boolean
+//     }
+// }
+pub const Axiom = struct {
+    name: u32,
+    levelParams: []u32,
+    type: u32,
+    isUnsafe: bool,
+};
+pub const WrappedAxiom = WrappedTag(Axiom, "axiom");
+
+// {
+//     "def": {
+//         "name": integer,
+//         "levelParams": Array<integer>,
+//         "type": integer,
+//         "value": integer,
+//         "hints": "opaque" | "abbrev" | {"regular": integer}
+//         "safety": "unsafe" | "safe" | "partial"
+//         "all": Array<integer>
+//     }
+// }
+pub const Def = struct {
+    name: u32,
+    levelParams: []u32,
+    type: u32,
+    value: u32,
+    hints: Hints,
+    safety: Safety,
+    all: []u32,
+};
+pub const WrappedDef = WrappedTag(Def, "def");
+
+// {
+//     "opaque": {
+//         "name": integer,
+//         "levelParams": Array<integer>,
+//         "type": integer,
+//         "value": integer,
+//         "isUnsafe": boolean,
+//         "all": Array<integer>
+//     }
+// }
+pub const Opaque = struct {
+    name: u32,
+    levelParams: []u32,
+    type: u32,
+    value: u32,
+    isUnsafe: bool,
+    all: []u32,
+};
+pub const WrappedOpaque = WrappedTag(Opaque, "opaque");
+
+// {
+//     "thm": {
+//         "name": integer,
+//         "levelParams": Array<integer>,
+//         "type": integer,
+//         "value": integer,
+//         "all": Array<integer>
+//     }
+// }
+pub const Thm = struct {
+    name: u32,
+    levelParams: []u32,
+    type: u32,
+    value: u32,
+    all: []u32,
+};
+pub const WrappedThm = WrappedTag(Thm, "thm");
+
+// {
+//     "quot": {
+//         "name": integer,
+//         "levelParams": Array<integer>,
+//         "type": integer,
+//         "kind": "type" | "ctor" | "lift" | "ind"
+//     }
+// }
+pub const Quot = struct {
+    name: u32,
+    levelParams: []u32,
+    type: u32,
+    kind: QuotKind,
+};
+pub const WrappedQuot = WrappedTag(Quot, "quot");
+
+const Hints = union(enum) {
     @"opaque",
     abbrev,
     regular: u32,
 };
 
-pub const Safety = enum { unsafe, safe, partial };
+const Safety = enum { unsafe, safe, partial };
 
-pub const QuotKind = enum { type, ctor, lift, ind };
+const QuotKind = enum { type, ctor, lift, ind };
 
 // -----------------------
 // INDUCTIVES
@@ -277,6 +298,7 @@ pub const Inductive = struct {
     ctors: []ConstructorVal,
     recs: []RecursorVal,
 };
+pub const WrappedInductive = WrappedTag(Inductive, "inductive");
 
 // {
 //     "name": integer,
