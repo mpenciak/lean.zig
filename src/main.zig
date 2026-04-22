@@ -42,13 +42,11 @@ pub fn main(init: std.process.Init) !void {
 
         const kind = findKind(parsed_obj.value.object).?;
         std.debug.print("{}\n", .{kind});
-        // const line_obj = parsed_obj.value;
-        // const line_obj_obj = line_obj.object;
-        // const keys = line_obj_obj.ge
-        // const strnameraw =
-        //     json.parseFromValue(StrName, gpa, line_obj, .{}) catch continue;
-        // defer strnameraw.deinit();
-        // std.debug.print("successfully parsed {}\n", .{strnameraw.value});
+        const line_obj = parsed_obj.value;
+        const strnameraw =
+            json.parseFromValue(root.data.IndexedStrName, gpa, line_obj, .{}) catch continue;
+        defer strnameraw.deinit();
+        std.debug.print("successfully parsed {}\n", .{strnameraw.value});
     }
 }
 

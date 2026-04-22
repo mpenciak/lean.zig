@@ -16,10 +16,10 @@ pub const NameContext = struct {
 };
 
 pub const LevelContext = struct {
-    map: std.ArrayList(data.LevelExpr),
+    map: std.ArrayList(data.Level),
 
     pub fn init(allocator: std.mem.Allocator) !LevelContext {
-        const level_map: std.ArrayList(data.LevelExpr) = try .initCapacity(allocator, 50);
+        const level_map: std.ArrayList(data.Level) = try .initCapacity(allocator, 50);
         return .{ .map = level_map };
     }
 
