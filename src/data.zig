@@ -138,6 +138,7 @@ pub const Expr = union(enum) {
     // { "mdata": { "expr": integer, "data": object }, "ie": integer }
     mdata: struct {
         expr: u32,
+        // TODO: I need to add a `data` object
     },
 };
 
@@ -160,6 +161,205 @@ pub const IndexedMdataExpr = IndexedTag(Expr, "mdata", "ie");
 // DECLS
 // -----------------------
 
+/// This is the `Decl` data structure we'll use outside of the context of parsing
+pub const Decl = union(enum) {
+    // {
+    //     "axiom": {
+    //         "name": integer,
+    //         "levelParams": Array<integer>,
+    //         "type": integer,
+    //         "isUnsafe": boolean
+    //     }
+    // }
+    axiom: struct {
+        name: u32,
+        levelParams: []u32,
+        type: u32,
+        isUnsafe: bool,
+    },
+
+    // {
+    //     "def": {
+    //         "name": integer,
+    //         "levelParams": Array<integer>,
+    //         "type": integer,
+    //         "value": integer,
+    //         "hints": "opaque" | "abbrev" | {"regular": integer}
+    //         "safety": "unsafe" | "safe" | "partial"
+    //         "all": Array<integer>
+    //     }
+    // }
+    def: struct {
+        name: u32,
+        levelParams: []u32,
+        type: u32,
+        value: u32,
+        hints: Hints,
+        safety: Safety,
+        all: []u32,
+    },
+
+    // {
+    //     "opaque": {
+    //         "name": integer,
+    //         "levelParams": Array<integer>,
+    //         "type": integer,
+    //         "value": integer,
+    //         "isUnsafe": boolean,
+    //         "all": Array<integer>
+    //     }
+    // }
+    @"opaque": struct {
+        name: u32,
+        levelParams: []u32,
+        type: u32,
+        value: u32,
+        isUnsafe: bool,
+        all: []u32,
+    },
+
+    // {
+    //     "thm": {
+    //         "name": integer,
+    //         "levelParams": Array<integer>,
+    //         "type": integer,
+    //         "value": integer,
+    //         "all": Array<integer>
+    //     }
+    // }
+    thm: struct {
+        name: u32,
+        levelParams: []u32,
+        type: u32,
+        value: u32,
+        all: []u32,
+    },
+
+    // {
+    //     "quot": {
+    //         "name": integer,
+    //         "levelParams": Array<integer>,
+    //         "type": integer,
+    //         "kind": "type" | "ctor" | "lift" | "ind"
+    //     }
+    // }
+    quot: struct {
+        name: u32,
+        levelParams: []u32,
+        type: u32,
+        kind: QuotKind,
+    },
+};
+
+pub const Hints = union(enum) {
+    @"opaque",
+    abbrev,
+    regular: u32,
+};
+
+pub const Safety = enum { unsafe, safe, partial };
+
+pub const QuotKind = enum { type, ctor, lift, ind };
+
 // -----------------------
 // INDUCTIVES
 // -----------------------
+
+// {
+//     "inductive": {
+//         "types": Array<InductiveVal>,
+//         "ctors": Array<ConstructorVal>,
+//         "recs": Array<RecursorVal>
+//     }
+// }
+pub const Inductive = struct {
+    types: []InductiveVal,
+    ctors: []ConstructorVal,
+    recs: []RecursorVal,
+};
+
+// {
+//     "name": integer,
+//     "levelParams": Array<integer>,
+//     "type": integer,
+//     "numParams": integer,
+//     "numIndices": integer,
+//     "all": Array<integer>,
+//     "ctors": Array<integer>,
+//     "numNested": integer,
+//     "isRec": boolean,
+//     "isUnsafe": boolean,
+//     "isReflexive": boolean,
+// }
+pub const InductiveVal = struct {
+    name: u32,
+    levelParams: []u32,
+    type: u32,
+    numParams: u32,
+    numIndices: u32,
+    all: []u32,
+    ctors: []u32,
+    numNested: u32,
+    isRec: bool,
+    isUnsafe: bool,
+    isReflexive: bool,
+};
+
+// {
+//     "name": integer,
+//     "levelParams": Array<integer>,
+//     "type": integer,
+//     "induct": integer,
+//     "cidx": integer,
+//     "numParams": integer,
+//     "numFields": integer,
+//     "isUnsafe": boolean
+// }
+pub const ConstructorVal = struct {
+    name: u32,
+    levelParams: []u32,
+    type: u32,
+    induct: u32,
+    cidx: u32,
+    numParams: u32,
+    numFields: u32,
+    isUnsafe: bool,
+};
+
+// {
+//     "name": integer,
+//     "levelParams": Array<integer>,
+//     "type": integer,
+//     "all": Array<integer>,
+//     "numParams": integer,
+//     "numIndices": integer,
+//     "numMotives": integer,
+//     "numMinors": integer,
+//     "rules": Array<RecursorRule>,
+//     "k": boolean,
+//     "isUnsafe": boolean
+// }
+pub const RecursorVal = struct {
+    name: u32,
+    levelParams: []u32,
+    type: u32,
+    all: []u32,
+    numParams: u32,
+    numIndices: u32,
+    numMotives: u32,
+    numMinors: u32,
+    rules: []RecursorRule,
+    k: bool,
+    isUnsafe: bool,
+};
+
+// {
+//     "ctor": integer,
+//     "nfields": integer,
+//     "rhs": integer
+// }
+pub const RecursorRule = struct {
+    ctor: u32,
+    nfields: u32,
+    rhs: u32,
+};
