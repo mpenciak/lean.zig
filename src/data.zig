@@ -276,6 +276,33 @@ const Hints = union(enum) {
     @"opaque",
     abbrev,
     regular: u32,
+
+    // Custom JSON parsing logic because `Hints` is a mix of types
+    pub fn jsonParseFromValue(
+        allocator: std.mem.Allocator,
+        source: std.json.Value,
+        options: std.json.ParseOptions,
+    ) !Hints {
+        _ = allocator;
+        _ = options;
+        switch (source) {
+            .string => |s| {
+                if (std.mem.eql(u8, s, "opaque")) return .@"opaque";
+                if (std.mem.eql(u8, s, "abbrev")) return .abbrev;
+                return error.UnexpectedToken;
+            },
+            .object => |obj| {
+                const entry = obj.get("regular") orelse return error.UnexpectedToken;
+                switch (entry) {
+                    .integer => |i| return .{
+                        .regular = std.math.cast(u32, i) orelse return error.Overflow,
+                    },
+                    else => return error.UnexpectedToken,
+                }
+            },
+            else => return error.UnexpectedToken,
+        }
+    }
 };
 
 const Safety = enum { unsafe, safe, partial };
@@ -385,3 +412,35 @@ pub const RecursorRule = struct {
     nfields: u32,
     rhs: u32,
 };
+const testing = std.testing;
+const json = std.json;
+
+test "Hints parses bare `\"opaque\"` via custom hook" {
+    const raw = try json.parseFromSlice(json.Value, testing.allocator, "\"opaque\"", .{});
+    defer raw.deinit();
+
+    const parsed = try json.parseFromValue(Hints, testing.allocator, raw.value, .{});
+    defer parsed.deinit();
+
+    try testing.expectEqual(Hints{ .@"opaque" = {} }, parsed.value);
+}
+
+test "Hints parses bare `\"abbrev\"` via custom hook" {
+    const raw = try json.parseFromSlice(json.Value, testing.allocator, "\"abbrev\"", .{});
+    defer raw.deinit();
+
+    const parsed = try json.parseFromValue(Hints, testing.allocator, raw.value, .{});
+    defer parsed.deinit();
+
+    try testing.expectEqual(Hints{ .abbrev = {} }, parsed.value);
+}
+
+test "Hints parses `{\"regular\": 7}` via custom hook" {
+    const raw = try json.parseFromSlice(json.Value, testing.allocator, "{\"regular\":7}", .{});
+    defer raw.deinit();
+
+    const parsed = try json.parseFromValue(Hints, testing.allocator, raw.value, .{});
+    defer parsed.deinit();
+
+    try testing.expectEqual(@as(u32, 7), parsed.value.regular);
+}

@@ -17,20 +17,6 @@ pub fn main(init: std.process.Init) !void {
     };
 
     try processFile(io, gpa, file_path);
-
-    // while (try reader.takeDelimiter('\n')) |line| : (idx += 1) {
-    //     const parsed_obj =
-    //         try json.parseFromSlice(json.Value, gpa, line, .{});
-    //     defer parsed_obj.deinit();
-    //
-    //     const kind = root.parser.findKind(parsed_obj.value.object).?;
-    //     std.debug.print("{}\n", .{kind});
-    //     const line_obj = parsed_obj.value;
-    //     const strnameraw =
-    //         json.parseFromValue(root.data.IndexedStrName, gpa, line_obj, .{}) catch continue;
-    //     defer strnameraw.deinit();
-    //     std.debug.print("successfully parsed {}\n", .{strnameraw.value});
-    // }
 }
 
 fn processFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
@@ -57,7 +43,17 @@ fn processFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     }
 }
 
-// TODO this
+fn parseLine(ctx_arena: std.mem.Allocator, gpa: std.mem.Allocator, context: *root.context.Context, line: []const u8) !void {
+    const parsed_obj = try json.parseFromSlice(json.Value, gpa, line, .{});
+    defer parsed_obj.deinit();
+    const obj = parsed_obj.value;
+
+    const kind = root.parser.findLineKind(obj.object).?;
+    switch (kind) {
+        inline else => |k| try handleKind(k, ctx_arena, context, obj),
+    }
+}
+
 fn handleKind(comptime line_kind: root.parser.LineKind, arena: std.mem.Allocator, context: *root.context.Context, obj: json.Value) !void {
     const ParserTarget = line_kind.associatedType();
     const parsed = try json.parseFromValue(ParserTarget, arena, obj, .{});
@@ -71,33 +67,4 @@ fn handleKind(comptime line_kind: root.parser.LineKind, arena: std.mem.Allocator
 
     try @field(context, ctx_field_name).append(arena, item);
     std.debug.print("parsed {}: {}\n", .{ line_kind, item });
-}
-
-fn parseLine(ctx_arena: std.mem.Allocator, gpa: std.mem.Allocator, context: *root.context.Context, line: []const u8) !void {
-    const parsed_obj = try json.parseFromSlice(json.Value, gpa, line, .{});
-    defer parsed_obj.deinit();
-    const obj = parsed_obj.value;
-
-    const kind = root.parser.findLineKind(obj.object).?;
-    switch (kind) {
-        // // Names
-        // .str => {
-        //     try handleKind(root.data.IndexedStrName, .str, ctx_arena, context, obj);
-        // },
-        // .num => {
-        //     try handleKind(root.data.IndexedNumName, .num, ctx_arena, context, obj);
-        // },
-        // // Levels
-        // .succ => {
-        //     try handleKind(root.data.IndexedSuccLevel, .succ, ctx_arena, context, obj);
-        // },
-        // .max => {
-        //     try handleKind(root.data.IndexedMaxLevel, .max, ctx_arena, context, obj);
-        // },
-        // .imax => {
-        //     try handleKind
-        // },
-        inline else => |k| try handleKind(k, ctx_arena, context, obj),
-        // std.debug.print("{}\n", .{kind}),
-    }
 }
