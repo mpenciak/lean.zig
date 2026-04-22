@@ -1,6 +1,6 @@
 const std = @import("std");
 const json = std.json;
-const lean_zig = @import("lean_zig");
+const root = @import("lean_zig");
 
 pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
@@ -27,137 +27,76 @@ pub fn main(init: std.process.Init) !void {
     const first_line = (try reader.takeDelimiter('\n')).?;
 
     const obj =
-        try json.parseFromSlice(Header, gpa, first_line, .{});
+        try json.parseFromSlice(root.meta.Header, gpa, first_line, .{});
     defer obj.deinit();
 
-    var name_context: NameContext = try .init(gpa);
+    var name_context: root.context.NameContext = try .init(gpa);
     defer name_context.deinit(gpa);
-    var level_context: LevelContext = try .init(gpa);
+    var level_context: root.context.LevelContext = try .init(gpa);
     defer level_context.deinit(gpa);
 
-    while (try reader.takeDelimiter('\n')) |line| : (idx = idx + 1) {
+    while (try reader.takeDelimiter('\n')) |line| : (idx += 1) {
         const parsed_obj =
             try json.parseFromSlice(json.Value, gpa, line, .{});
         defer parsed_obj.deinit();
-        const line_obj = parsed_obj.value;
-        const strnameraw =
-            json.parseFromValue(StrName, gpa, line_obj, .{}) catch continue;
-        defer strnameraw.deinit();
-        std.debug.print("successfully parsed {}\n", .{strnameraw.value});
+
+        const kind = findKind(parsed_obj.value.object).?;
+        std.debug.print("{}\n", .{kind});
+        // const line_obj = parsed_obj.value;
+        // const line_obj_obj = line_obj.object;
+        // const keys = line_obj_obj.ge
+        // const strnameraw =
+        //     json.parseFromValue(StrName, gpa, line_obj, .{}) catch continue;
+        // defer strnameraw.deinit();
+        // std.debug.print("successfully parsed {}\n", .{strnameraw.value});
     }
 }
 
-// {
-//     "num": {
-//         "pre": integer,
-//         "i": integer
-//     }
-//     "in": integer,
-// }
-const NumName = struct {
-    num: NumNameInner,
-    in: u32,
-};
-const NumNameInner = struct {
-    pre: u32,
-    i: u32,
-};
+// fn parseLine(line: []u8, allocator: std.mem.Allocator, context: *root.context.Context) !void {}
 
-// {
-//     "str": {
-//         "pre": integer,
-//         "str": string
-//     },
-//     "in": integer,
-// }
-const StrName = struct {
-    str: StrNameInner,
-    in: u32,
-};
-
-const StrNameInner = struct {
-    pre: u32,
-    str: []const u8,
-};
-
-const Name = union(enum) {
-    num: NumNameInner,
-    str: StrNameInner,
-};
-
-const NameContext = struct {
-    map: std.ArrayList(Name),
-
-    fn init(allocator: std.mem.Allocator) !NameContext {
-        const name_map: std.ArrayList(Name) = try .initCapacity(allocator, 50);
-
-        return .{ .map = name_map };
+fn findKind(obj: json.ObjectMap) ?LineKind {
+    var it = obj.iterator();
+    while (it.next()) |entry| {
+        if (std.meta.stringToEnum(LineKind, entry.key_ptr.*)) |k| return k;
     }
+    return null;
+}
 
-    fn deinit(self: *NameContext, allocator: std.mem.Allocator) void {
-        self.map.deinit(allocator);
-    }
+const LineKind = enum {
+    // Names
+    str,
+    num,
+    // Levels
+    succ,
+    max,
+    imax,
+    param,
+    // Exprs
+    bvar,
+    sort,
+    @"const",
+    app,
+    lam,
+    forallE,
+    letE,
+    proj,
+    natVal,
+    strVal,
+    mdata,
+    // Decls
+    axiom,
+    def,
+    @"opaque",
+    thm,
+    quot,
+    inductive,
 };
 
-const LevelExpr = union(enum) {
-    // {
-    //     "succ": integer
-    //     "il": integer,
-    // }
-    succ: struct {
-        inner: u32,
-    },
-
-    // {
-    //     "max": [integer, integer],
-    //     "il": integer,
-    // }
-    max: struct {
-        left: u32,
-        right: u32,
-    },
-
-    // {
-    //     "imax": [integer, integer],
-    //     "il": integer,
-    // }
-    imax: struct {
-        left: u32,
-        right: u32,
-    },
-
-    // {
-    //     "param": integer,
-    //     "il": integer,
-    // }
-    param: struct {
-        param: u32,
-    },
-};
-
-const LevelContext = struct {
-    map: std.ArrayList(LevelExpr),
-
-    fn init(allocator: std.mem.Allocator) !LevelContext {
-        const level_map: std.ArrayList(LevelExpr) = try .initCapacity(allocator, 50);
-        return .{ .map = level_map };
-    }
-
-    fn deinit(self: *LevelContext, allocator: std.mem.Allocator) void {
-        self.map.deinit(allocator);
-    }
-};
-
-const ExporterHeader = struct { name: []const u8, version: []const u8 };
-
-const LeanHeader = struct { githash: []const u8, version: []const u8 };
-
-const FormatHeader = struct { version: []const u8 };
-
-const MetaHeader = struct {
-    exporter: ExporterHeader,
-    lean: LeanHeader,
-    format: FormatHeader,
-};
-
-const Header = struct { meta: MetaHeader };
+// fn dispatchLine(
+//     gpa: std.mem.Allocator,
+//     line: []const u8,
+//     names: *NameContext,
+//     levels: *LevelContext,
+//     // exprs: *ExprContext,
+//     // decls: *Decls,
+// ) !void {}
