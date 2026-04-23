@@ -26,6 +26,15 @@ pub const Kind = enum {
             .decl => return data.Decl,
         }
     }
+
+    pub fn indexName(self: Kind) ?[]const u8 {
+        switch (self) {
+            .name => return "in",
+            .level => return "il",
+            .expr => return "ie",
+            .decl => return null,
+        }
+    }
 };
 
 pub const LineKind = enum {

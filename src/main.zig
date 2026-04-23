@@ -12,7 +12,13 @@ pub fn main(init: std.process.Init) !void {
 
     const arg0 = args.next().?; // path to executable
     const file_path = if (args.next()) |arg| arg else {
-        std.debug.print("Usage: {s} <path>\n", .{arg0});
+        const stdout = std.Io.File.stdout();
+        defer stdout.close(io);
+        var buffer: [128]u8 = undefined;
+        var writer = stdout.writerStreaming(io, &buffer);
+        const writer_interface = &writer.interface;
+        try writer_interface.print("Usage: {s} <file path>\n", .{arg0});
+        try writer_interface.flush();
         return;
     };
 
@@ -21,7 +27,6 @@ pub fn main(init: std.process.Init) !void {
 
 fn processFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     const file = try std.Io.Dir.cwd().openFile(io, path, .{});
-    defer file.close(io); // TODO: Maybe move this somewhere else?
 
     var buffer: [4098]u8 = undefined;
     var file_reader = file.reader(io, &buffer);
@@ -36,11 +41,12 @@ fn processFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var ctx_arena: std.heap.ArenaAllocator = .init(gpa);
     defer ctx_arena.deinit();
     const arena = ctx_arena.allocator();
-    var context: root.context.Context = .{};
+    var context: root.context.Context = try .init(arena);
 
     while (try reader.takeDelimiter('\n')) |line| : (line_number += 1) {
         try parseLine(arena, gpa, &context, line);
     }
+    file.close(io);
 }
 
 fn parseLine(ctx_arena: std.mem.Allocator, gpa: std.mem.Allocator, context: *root.context.Context, line: []const u8) !void {
@@ -54,17 +60,34 @@ fn parseLine(ctx_arena: std.mem.Allocator, gpa: std.mem.Allocator, context: *roo
     }
 }
 
+pub const ContextError = error{
+    BadIndex,
+};
+
 fn handleKind(comptime line_kind: root.parser.LineKind, arena: std.mem.Allocator, context: *root.context.Context, obj: json.Value) !void {
     const ParserTarget = line_kind.associatedType();
     const parsed = try json.parseFromValue(ParserTarget, arena, obj, .{});
 
     const constructor = @tagName(line_kind);
     const kind = comptime line_kind.toKind();
+    const index_name = kind.indexName();
     const associated_type = kind.associateData();
     const value = @field(parsed.value, constructor);
     const item = @unionInit(associated_type, constructor, value);
     const ctx_field_name = @tagName(kind) ++ "s";
 
-    try @field(context, ctx_field_name).append(arena, item);
+    if (index_name) |idx_name| {
+        const index: usize = @intCast(obj.object.get(idx_name).?.integer);
+        const len: usize = @field(context, ctx_field_name).items.len;
+        if (len == index) {
+            try @field(context, ctx_field_name).append(arena, item);
+        } else if (index < len) {
+            @field(context, ctx_field_name).items[index] = item;
+        } else {
+            try @field(context, ctx_field_name).appendNTimes(arena, null, len - index);
+        }
+    } else {
+        try @field(context, ctx_field_name).append(arena, item);
+    }
     std.debug.print("parsed {}: {}\n", .{ line_kind, item });
 }
