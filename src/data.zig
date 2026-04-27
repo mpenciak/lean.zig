@@ -23,7 +23,7 @@ fn IndexedTag(T: type, comptime tag: []const u8, comptime index_name: []const u8
     };
 
     const tag_type = fields[field_idx].type;
-    const field_types: [field_names.len]type = .{ tag_type, u32 };
+    const field_types: [field_names.len]type = .{ tag_type, usize };
 
     // These are already known
     const layout: std.builtin.Type.ContainerLayout = .auto;
@@ -45,10 +45,10 @@ fn WrappedTag(T: type, comptime tag: []const u8) type {
 /// This is the `Name` data structure we'll use outside of the context of parsing
 pub const Name = union(enum) {
     // { "num": { "pre": integer, "i": integer } "in": integer, }
-    num: struct { pre: u32, i: u32 },
+    num: struct { pre: usize, i: usize },
     // { "str": { "pre": integer, "str": string }, "in": integer, }
     str: struct {
-        pre: u32,
+        pre: usize,
         str: []const u8,
     },
 };
@@ -64,16 +64,16 @@ pub const IndexedStrName = IndexedTag(Name, "str", "in");
 /// This is the `Level` data structure we'll use outside of the context of parsing
 pub const Level = union(enum) {
     // { "succ": integer "il": integer, }
-    succ: u32,
+    succ: usize,
 
     // { "max": [integer, integer], "il": integer, }
-    max: [2]u32,
+    max: [2]usize,
 
     // { "imax": [integer, integer], "il": integer, }
-    imax: [2]u32,
+    imax: [2]usize,
 
     // { "param": integer, "il": integer, }
-    param: u32,
+    param: usize,
 };
 
 // These are the parsing targets
@@ -89,53 +89,53 @@ pub const IndexedParamLevel = IndexedTag(Level, "param", "il");
 /// This is the `Expr` data structure we'll use outside of the context of parsing
 pub const Expr = union(enum) {
     // { "bvar": integer, "ie": integer, }
-    bvar: u32,
+    bvar: usize,
 
     // { "sort": integer, "ie": integer, }
-    sort: u32,
+    sort: usize,
 
     // { "const": { "name": integer, "us": [integer] }, "ie": integer, }
     @"const": struct {
-        name: u32,
-        us: []u32,
+        name: usize,
+        us: []usize,
     },
 
     // { "app": { "fn": integer, "arg": integer }, "ie": integer, }
     app: struct {
-        @"fn": u32,
-        arg: u32,
+        @"fn": usize,
+        arg: usize,
     },
 
     // { "lam": { "name": integer, "type": integer, "body": integer, "binderInfo": ... }, "ie": integer, }
     lam: struct {
-        name: u32,
-        type: u32,
-        body: u32,
+        name: usize,
+        type: usize,
+        body: usize,
         binderInfo: BinderInfo,
     },
 
     // { "forallE": { "name": integer, "type": integer, "body": integer, "binderInfo": ... }, "ie": integer, }
     forallE: struct {
-        name: u32,
-        type: u32,
-        body: u32,
+        name: usize,
+        type: usize,
+        body: usize,
         binderInfo: BinderInfo,
     },
 
     // { "letE": { "name": integer, "type": integer, "value": integer, "body": integer, "nondep": boolean }, "ie": integer, }
     letE: struct {
-        name: u32,
-        type: u32,
-        value: u32,
-        body: u32,
+        name: usize,
+        type: usize,
+        value: usize,
+        body: usize,
         nondep: bool,
     },
 
     // { "proj": { "typeName": integer, "idx": integer, "struct": integer }, "ie": integer, }
     proj: struct {
-        typeName: u32,
-        idx: u32,
-        @"struct": u32,
+        typeName: usize,
+        idx: usize,
+        @"struct": usize,
     },
 
     // { "natVal": string, "ie": integer }
@@ -146,7 +146,7 @@ pub const Expr = union(enum) {
 
     // { "mdata": { "expr": integer, "data": object }, "ie": integer }
     mdata: struct {
-        expr: u32,
+        expr: usize,
         // TODO: I need to add a `data` object
     },
 };
@@ -189,9 +189,9 @@ pub const Decl = union(enum) {
 //     }
 // }
 pub const Axiom = struct {
-    name: u32,
-    levelParams: []u32,
-    type: u32,
+    name: usize,
+    levelParams: []usize,
+    type: usize,
     isUnsafe: bool,
 };
 pub const WrappedAxiom = WrappedTag(Axiom, "axiom");
@@ -208,13 +208,13 @@ pub const WrappedAxiom = WrappedTag(Axiom, "axiom");
 //     }
 // }
 pub const Def = struct {
-    name: u32,
-    levelParams: []u32,
-    type: u32,
-    value: u32,
+    name: usize,
+    levelParams: []usize,
+    type: usize,
+    value: usize,
     hints: Hints,
     safety: Safety,
-    all: []u32,
+    all: []usize,
 };
 pub const WrappedDef = WrappedTag(Def, "def");
 
@@ -229,12 +229,12 @@ pub const WrappedDef = WrappedTag(Def, "def");
 //     }
 // }
 pub const Opaque = struct {
-    name: u32,
-    levelParams: []u32,
-    type: u32,
-    value: u32,
+    name: usize,
+    levelParams: []usize,
+    type: usize,
+    value: usize,
     isUnsafe: bool,
-    all: []u32,
+    all: []usize,
 };
 pub const WrappedOpaque = WrappedTag(Opaque, "opaque");
 
@@ -248,11 +248,11 @@ pub const WrappedOpaque = WrappedTag(Opaque, "opaque");
 //     }
 // }
 pub const Thm = struct {
-    name: u32,
-    levelParams: []u32,
-    type: u32,
-    value: u32,
-    all: []u32,
+    name: usize,
+    levelParams: []usize,
+    type: usize,
+    value: usize,
+    all: []usize,
 };
 pub const WrappedThm = WrappedTag(Thm, "thm");
 
@@ -265,9 +265,9 @@ pub const WrappedThm = WrappedTag(Thm, "thm");
 //     }
 // }
 pub const Quot = struct {
-    name: u32,
-    levelParams: []u32,
-    type: u32,
+    name: usize,
+    levelParams: []usize,
+    type: usize,
     kind: QuotKind,
 };
 pub const WrappedQuot = WrappedTag(Quot, "quot");
@@ -275,7 +275,7 @@ pub const WrappedQuot = WrappedTag(Quot, "quot");
 const Hints = union(enum) {
     @"opaque",
     abbrev,
-    regular: u32,
+    regular: usize,
 
     // Custom JSON parsing logic because `Hints` is a mix of types
     pub fn jsonParseFromValue(
@@ -295,7 +295,7 @@ const Hints = union(enum) {
                 const entry = obj.get("regular") orelse return error.UnexpectedToken;
                 switch (entry) {
                     .integer => |i| return .{
-                        .regular = std.math.cast(u32, i) orelse return error.Overflow,
+                        .regular = std.math.cast(usize, i) orelse return error.Overflow,
                     },
                     else => return error.UnexpectedToken,
                 }
@@ -341,14 +341,14 @@ pub const WrappedInductive = WrappedTag(Inductive, "inductive");
 //     "isReflexive": boolean,
 // }
 pub const InductiveVal = struct {
-    name: u32,
-    levelParams: []u32,
-    type: u32,
-    numParams: u32,
-    numIndices: u32,
-    all: []u32,
-    ctors: []u32,
-    numNested: u32,
+    name: usize,
+    levelParams: []usize,
+    type: usize,
+    numParams: usize,
+    numIndices: usize,
+    all: []usize,
+    ctors: []usize,
+    numNested: usize,
     isRec: bool,
     isUnsafe: bool,
     isReflexive: bool,
@@ -365,13 +365,13 @@ pub const InductiveVal = struct {
 //     "isUnsafe": boolean
 // }
 pub const ConstructorVal = struct {
-    name: u32,
-    levelParams: []u32,
-    type: u32,
-    induct: u32,
-    cidx: u32,
-    numParams: u32,
-    numFields: u32,
+    name: usize,
+    levelParams: []usize,
+    type: usize,
+    induct: usize,
+    cidx: usize,
+    numParams: usize,
+    numFields: usize,
     isUnsafe: bool,
 };
 
@@ -389,14 +389,14 @@ pub const ConstructorVal = struct {
 //     "isUnsafe": boolean
 // }
 pub const RecursorVal = struct {
-    name: u32,
-    levelParams: []u32,
-    type: u32,
-    all: []u32,
-    numParams: u32,
-    numIndices: u32,
-    numMotives: u32,
-    numMinors: u32,
+    name: usize,
+    levelParams: []usize,
+    type: usize,
+    all: []usize,
+    numParams: usize,
+    numIndices: usize,
+    numMotives: usize,
+    numMinors: usize,
     rules: []RecursorRule,
     k: bool,
     isUnsafe: bool,
@@ -408,9 +408,9 @@ pub const RecursorVal = struct {
 //     "rhs": integer
 // }
 pub const RecursorRule = struct {
-    ctor: u32,
-    nfields: u32,
-    rhs: u32,
+    ctor: usize,
+    nfields: usize,
+    rhs: usize,
 };
 const testing = std.testing;
 const json = std.json;
@@ -442,5 +442,5 @@ test "Hints parses `{\"regular\": 7}` via custom hook" {
     const parsed = try json.parseFromValue(Hints, testing.allocator, raw.value, .{});
     defer parsed.deinit();
 
-    try testing.expectEqual(@as(u32, 7), parsed.value.regular);
+    try testing.expectEqual(@as(usize, 7), parsed.value.regular);
 }

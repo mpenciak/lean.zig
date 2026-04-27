@@ -26,7 +26,7 @@ pub const Context = struct {
     }
 };
 
-pub fn writeName(ctx: *Context, writer: anytype, name_id: u32) !void {
+pub fn writeName(ctx: *Context, writer: anytype, name_id: usize) !void {
     const n_opt = ctx.names.items[name_id];
     if (n_opt) |name| {
         switch (name) {
@@ -50,7 +50,7 @@ pub fn writeName(ctx: *Context, writer: anytype, name_id: u32) !void {
     }
 }
 
-pub fn resolveNameAlloc(ctx: *Context, gpa: std.mem.Allocator, name_id: u32) ![]u8 {
+pub fn resolveNameAlloc(ctx: *Context, gpa: std.mem.Allocator, name_id: usize) ![]u8 {
     var buffer: std.Io.Writer.Allocating = .init(gpa);
     errdefer buffer.deinit();
 
