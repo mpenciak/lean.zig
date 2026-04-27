@@ -49,7 +49,13 @@ fn processFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     file.close(io);
 
     try context.populateNameMap(arena);
-    try root.context.printNames(&context, io);
+
+    std.debug.print("\nPrinting names!\n-----------------\n", .{});
+    try root.printers.printNames(&context, io);
+    std.debug.print("\nPrinting levels!\n----------------\n", .{});
+    try root.printers.printLevels(&context, io);
+    std.debug.print("\nPrinting exprs!\n-----------------\n", .{});
+    try root.printers.printExprs(&context, io);
 }
 
 fn parseLine(ctx_arena: std.mem.Allocator, gpa: std.mem.Allocator, context: *root.context.Context, line: []const u8) !void {
@@ -63,14 +69,10 @@ fn parseLine(ctx_arena: std.mem.Allocator, gpa: std.mem.Allocator, context: *roo
     }
     if (kind.toKind() == .name) {
         const name_id = obj.object.get("in").?.integer;
-        const resolved_name = try root.context.resolveNameAlloc(context, ctx_arena, @intCast(name_id));
+        const resolved_name = try root.writers.resolveNameAlloc(context, ctx_arena, @intCast(name_id));
         try context.nameMap.put(resolved_name, @intCast(name_id));
     }
 }
-
-pub const ContextError = error{
-    BadIndex,
-};
 
 fn handleKind(comptime line_kind: root.parser.LineKind, arena: std.mem.Allocator, context: *root.context.Context, obj: json.Value) !void {
     const ParserTarget = line_kind.associatedType();
