@@ -6,6 +6,7 @@ pub const Context = struct {
     levels: std.ArrayList(?data.Level),
     exprs: std.ArrayList(?data.Expr),
     decls: std.ArrayList(?data.Decl),
+    nameMap: std.StringHashMap(usize),
 
     pub fn init(allocator: std.mem.Allocator) !Context {
         var names: std.ArrayList(?data.Name) = .empty;
@@ -14,8 +15,9 @@ pub const Context = struct {
         try levels.append(allocator, null);
         const exprs: std.ArrayList(?data.Expr) = .empty;
         const decls: std.ArrayList(?data.Decl) = .empty;
+        const nameMap: std.StringHashMap(usize) = .init(allocator);
 
-        return Context{ .names = names, .levels = levels, .exprs = exprs, .decls = decls };
+        return Context{ .names = names, .levels = levels, .exprs = exprs, .decls = decls, .nameMap = nameMap };
     }
 
     pub fn deinit(self: *Context, gpa: std.mem.Allocator) void {
@@ -24,7 +26,44 @@ pub const Context = struct {
         self.exprs.deinit(gpa);
         self.decls.deinit(gpa);
     }
+
+    pub fn populateNameMap(self: *Context, gpa: std.mem.Allocator) !void {
+        for (0..self.names.items.len) |name_id| {
+            if (name_id == 0) {
+                try self.nameMap.put("_root_", 0);
+            } else {
+                const resolved_name = try resolveNameAlloc(self, gpa, name_id);
+                try self.nameMap.put(resolved_name, name_id);
+            }
+        }
+    }
 };
+
+pub fn writeExpr(ctx: *Context, writer: anytype, expr_id: usize) !void {
+    const expr_opt = ctx.exprs.items[expr_id];
+
+    if (expr_opt) |expr| {
+        switch (expr) {
+            .bvar => |db_idx| {
+                try writer.print("#{d}", db_idx);
+            },
+            .sort => |level_id| {
+                try writeLevel(ctx, writer, level_id);
+            },
+            else => {
+                std.debug.print("Haven't figured out how to print these guys yet {}", .{});
+            },
+        }
+    } else {
+        return;
+    }
+}
+
+pub fn writeLevel(ctx: *Context, writer: anytype, level_id: usize) !void {
+    _ = ctx;
+    _ = writer;
+    _ = level_id;
+}
 
 pub fn writeName(ctx: *Context, writer: anytype, name_id: usize) !void {
     const n_opt = ctx.names.items[name_id];
@@ -80,4 +119,9 @@ pub fn printNames(ctx: *Context, io: std.Io) !void {
     const last_name = try resolveNameAlloc(ctx, allocator, 1);
     try inter.print("one last one: {s}\n", .{last_name});
     try inter.flush();
+}
+
+pub fn printExprs(ctx: *Context, io: std.Io) !void {
+    _ = ctx;
+    _ = io;
 }

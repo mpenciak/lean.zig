@@ -48,6 +48,7 @@ fn processFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     }
     file.close(io);
 
+    try context.populateNameMap(arena);
     try root.context.printNames(&context, io);
 }
 
@@ -59,6 +60,11 @@ fn parseLine(ctx_arena: std.mem.Allocator, gpa: std.mem.Allocator, context: *roo
     const kind = root.parser.findLineKind(obj.object).?;
     switch (kind) {
         inline else => |k| try handleKind(k, ctx_arena, context, obj),
+    }
+    if (kind.toKind() == .name) {
+        const name_id = obj.object.get("in").?.integer;
+        const resolved_name = try root.context.resolveNameAlloc(context, ctx_arena, @intCast(name_id));
+        try context.nameMap.put(resolved_name, @intCast(name_id));
     }
 }
 
