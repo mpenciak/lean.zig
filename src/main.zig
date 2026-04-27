@@ -47,6 +47,8 @@ fn processFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
         try parseLine(arena, gpa, &context, line);
     }
     file.close(io);
+
+    try root.context.printNames(&context, io);
 }
 
 fn parseLine(ctx_arena: std.mem.Allocator, gpa: std.mem.Allocator, context: *root.context.Context, line: []const u8) !void {
