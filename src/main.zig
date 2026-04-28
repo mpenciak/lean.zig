@@ -49,12 +49,17 @@ fn processFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     file.close(io);
 
     try context.populateNameMap(arena);
+    var buffered = std.Io.File.stdout().writer(io, &buffer);
+    const writer = &buffered.interface;
 
-    std.debug.print("\nPrinting names!\n-----------------\n", .{});
+    try writer.writeAll("\nPrinting names!\n-----------------\n");
+    try writer.flush();
     try root.printers.printNames(&context, io);
-    std.debug.print("\nPrinting levels!\n----------------\n", .{});
+    try writer.writeAll("\nPrinting levels!\n----------------\n");
+    try writer.flush();
     try root.printers.printLevels(&context, io);
-    std.debug.print("\nPrinting exprs!\n-----------------\n", .{});
+    try writer.writeAll("\nPrinting exprs!\n-----------------\n");
+    try writer.flush();
     try root.printers.printExprs(&context, io);
 }
 
@@ -99,5 +104,4 @@ fn handleKind(comptime line_kind: root.parser.LineKind, arena: std.mem.Allocator
     } else {
         try @field(context, ctx_field_name).append(arena, item);
     }
-    std.debug.print("parsed {}: {}\n", .{ line_kind, item });
 }
