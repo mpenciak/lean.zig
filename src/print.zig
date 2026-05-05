@@ -28,14 +28,14 @@ pub fn printLevels(ctx: *Context, io: std.Io) !void {
     try writer.flush();
 }
 
-pub fn printExprs(ctx: *Context, io: std.Io) !void {
+pub fn printExprs(ctx: *Context, io: std.Io, gpa: std.mem.Allocator) !void {
     const stdout = std.Io.File.stdout();
     var buffer: [4096]u8 = undefined;
     var buffered = stdout.writer(io, &buffer);
     const writer = &buffered.interface;
 
     for (0..ctx.exprs.items.len) |expr_id| {
-        try writers.fmtExpr(ctx, expr_id).format(writer);
+        try writers.fmtExpr(ctx, gpa, expr_id).format(writer);
         try writer.writeAll("\n");
     }
     try writer.flush();
