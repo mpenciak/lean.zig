@@ -2,6 +2,7 @@ const std = @import("std");
 const Writer = std.Io.Writer;
 
 const Context = @import("context.zig").Context;
+const BinderInfo = @import("data.zig").BinderInfo;
 
 pub const NameFormatter = struct {
     ctx: *Context,
@@ -90,9 +91,33 @@ pub fn fmtLevel(ctx: *Context, level_id: usize) LevelFormatter {
     return .{ .ctx = ctx, .level_id = level_id };
 }
 
+pub const Precedence = enum {
+    free,
+    arg,
+};
+
+pub const NamingEnv = struct {
+    local: []usize,
+    parent: ?*const NamingEnv,
+
+    pub fn resolve(self: *const NamingEnv, db_idx: usize) ?usize {
+        if (db_idx >= self.local.len) {
+            if (self.parent) |parent| {
+                return parent.resolve(db_idx - self.local.len);
+            } else {
+                return null;
+            }
+        } else {
+            return self.local[self.local.len - db_idx - 1];
+        }
+    }
+};
+
 pub const ExprFormatter = struct {
     ctx: *Context,
     expr_id: usize,
+    prec: Precedence = .free,
+    names: ?*const NamingEnv = null,
 
     pub fn format(self: ExprFormatter, writer: *Writer) Writer.Error!void {
         const expr_opt = self.ctx.exprs.items[self.expr_id];
@@ -100,6 +125,13 @@ pub const ExprFormatter = struct {
         if (expr_opt) |expr| {
             switch (expr) {
                 .bvar => |db_idx| {
+                    if (self.names) |name_ctx| {
+                        if (name_ctx.resolve(db_idx)) |name_idx| {
+                            try fmtName(self.ctx, name_idx).format(writer);
+                            return;
+                        }
+                    }
+                    // Fall back to de bruijn printing for free variables
                     try writer.print("#{d}", .{db_idx});
                 },
                 .sort => |level_id| {
@@ -115,8 +147,106 @@ pub const ExprFormatter = struct {
                     const level_list = fmtCommaSep(usize, fmtLevel, self.ctx, const_data.us);
                     try writer.print("{[name]f}.{{{[levels]f}}}", .{ .name = name, .levels = level_list });
                 },
+                .app => |app_data| {
+                    if (self.prec == .arg) {
+                        try writer.writeByte('(');
+                    }
+                    const fn_part = fmtExpr(
+                        self.ctx,
+                        app_data.@"fn",
+                        .free,
+                        self.names,
+                    );
+                    const arg_part = fmtExpr(
+                        self.ctx,
+                        app_data.arg,
+                        .arg,
+                        self.names,
+                    );
+
+                    try writer.print("{[fn_part]f} {[arg_part]f}", .{ .fn_part = fn_part, .arg_part = arg_part });
+
+                    if (self.prec == .arg) {
+                        try writer.writeByte(')');
+                    }
+                },
+                .lam => |lam_data| {
+                    if (self.prec == .arg) {
+                        try writer.writeByte('(');
+                    }
+
+                    try writer.writeAll("fun ");
+
+                    var name_formatter = fmtName(self.ctx, lam_data.name);
+                    var type_formatter = fmtExpr(
+                        self.ctx,
+                        lam_data.type,
+                        .free,
+                        self.names,
+                    );
+
+                    try writeBinder(
+                        name_formatter,
+                        type_formatter,
+                        lam_data.binderInfo,
+                        writer,
+                    );
+
+                    var local_names: [64]usize = undefined;
+                    var bound_count: usize = 0;
+                    local_names[bound_count] = lam_data.name;
+                    bound_count += 1;
+
+                    var body_idx = lam_data.body;
+
+                    while (self.ctx.exprs.items[body_idx]) |body_expr| {
+                        switch (body_expr) {
+                            .lam => |inner_lam_data| {
+                                name_formatter = fmtName(self.ctx, inner_lam_data.name);
+                                const new_names: NamingEnv = .{
+                                    .local = local_names[0..bound_count],
+                                    .parent = self.names,
+                                };
+                                type_formatter = fmtExpr(
+                                    self.ctx,
+                                    inner_lam_data.type,
+                                    .free,
+                                    &new_names,
+                                );
+                                try writeBinder(
+                                    name_formatter,
+                                    type_formatter,
+                                    inner_lam_data.binderInfo,
+                                    writer,
+                                );
+                                local_names[bound_count] = inner_lam_data.name;
+                                bound_count += 1;
+                                body_idx = inner_lam_data.body;
+                            },
+                            else => {
+                                const new_names: NamingEnv = .{
+                                    .local = local_names[0..bound_count],
+                                    .parent = self.names,
+                                };
+
+                                try writer.print("=> {[body]f}", .{ .body = fmtExpr(
+                                    self.ctx,
+                                    body_idx,
+                                    .free,
+                                    &new_names,
+                                ) });
+
+                                break;
+                            },
+                        }
+                    }
+
+                    if (self.prec == .arg) {
+                        try writer.writeByte(')');
+                    }
+                },
                 else => {
-                    try writer.print("TODO: {}", .{expr});
+                    try writer.print("(TODO: {})", .{expr});
                 },
             }
         } else { // TODO: Fail here
@@ -125,8 +255,27 @@ pub const ExprFormatter = struct {
     }
 };
 
-pub fn fmtExpr(ctx: *Context, expr_id: usize) ExprFormatter {
-    return .{ .ctx = ctx, .expr_id = expr_id };
+fn writeBinder(
+    namefmt: NameFormatter,
+    typefmt: ExprFormatter,
+    binder: BinderInfo,
+    writer: *Writer,
+) Writer.Error!void {
+    try writer.print("{[open]c}{[name]f} : {[typefmt]f}{[close]c} ", .{
+        .open = binder.opening(),
+        .name = namefmt,
+        .typefmt = typefmt,
+        .close = binder.closing(),
+    });
+}
+
+pub fn fmtExpr(ctx: *Context, expr_id: usize, prec: Precedence, names: ?*const NamingEnv) ExprFormatter {
+    return .{
+        .ctx = ctx,
+        .expr_id = expr_id,
+        .prec = prec,
+        .names = names,
+    };
 }
 
 pub fn CommaSepFormatter(comptime T: type, comptime fmt_fn: anytype) type {

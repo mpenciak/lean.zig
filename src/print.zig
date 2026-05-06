@@ -35,7 +35,12 @@ pub fn printExprs(ctx: *Context, io: std.Io) !void {
     const writer = &buffered.interface;
 
     for (0..ctx.exprs.items.len) |expr_id| {
-        try writers.fmtExpr(ctx, expr_id).format(writer);
+        try writers.fmtExpr(
+            ctx,
+            expr_id,
+            .free,
+            null,
+        ).format(writer);
         try writer.writeAll("\n");
     }
     try writer.flush();

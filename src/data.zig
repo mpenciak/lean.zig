@@ -151,7 +151,30 @@ pub const Expr = union(enum) {
     },
 };
 
-pub const BinderInfo = enum { default, implicit, strictImplicit, instImplicit };
+pub const BinderInfo = enum {
+    default,
+    implicit,
+    strictImplicit,
+    instImplicit,
+
+    pub fn opening(self: BinderInfo) u8 {
+        return switch (self) {
+            .default => '(',
+            .implicit => '{',
+            .strictImplicit => '{', // TODO: actually print this different
+            .instImplicit => '[',
+        };
+    }
+
+    pub fn closing(self: BinderInfo) u8 {
+        return switch (self) {
+            .default => ')',
+            .implicit => '}',
+            .strictImplicit => '}', // TODO: actually print this different
+            .instImplicit => ']',
+        };
+    }
+};
 
 // These are the parsing targets
 pub const IndexedBVarExpr = IndexedTag(Expr, "bvar", "ie");
