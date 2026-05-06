@@ -170,87 +170,81 @@ pub const ExprFormatter = struct {
                         try writer.writeByte(')');
                     }
                 },
-                .lam => |lam_data| {
-                    if (self.prec == .arg) {
-                        try writer.writeByte('(');
-                    }
-
-                    try writer.writeAll("fun ");
-
-                    var name_formatter = fmtName(self.ctx, lam_data.name);
-                    var type_formatter = fmtExpr(
-                        self.ctx,
-                        lam_data.type,
-                        .free,
-                        self.names,
-                    );
-
-                    try writeBinder(
-                        name_formatter,
-                        type_formatter,
-                        lam_data.binderInfo,
-                        writer,
-                    );
-
-                    var local_names: [64]usize = undefined;
-                    var bound_count: usize = 0;
-                    local_names[bound_count] = lam_data.name;
-                    bound_count += 1;
-
-                    var body_idx = lam_data.body;
-
-                    while (self.ctx.exprs.items[body_idx]) |body_expr| {
-                        switch (body_expr) {
-                            .lam => |inner_lam_data| {
-                                name_formatter = fmtName(self.ctx, inner_lam_data.name);
-                                const new_names: NamingEnv = .{
-                                    .local = local_names[0..bound_count],
-                                    .parent = self.names,
-                                };
-                                type_formatter = fmtExpr(
-                                    self.ctx,
-                                    inner_lam_data.type,
-                                    .free,
-                                    &new_names,
-                                );
-                                try writeBinder(
-                                    name_formatter,
-                                    type_formatter,
-                                    inner_lam_data.binderInfo,
-                                    writer,
-                                );
-                                local_names[bound_count] = inner_lam_data.name;
-                                bound_count += 1;
-                                body_idx = inner_lam_data.body;
-                            },
-                            else => {
-                                const new_names: NamingEnv = .{
-                                    .local = local_names[0..bound_count],
-                                    .parent = self.names,
-                                };
-
-                                try writer.print("=> {[body]f}", .{ .body = fmtExpr(
-                                    self.ctx,
-                                    body_idx,
-                                    .free,
-                                    &new_names,
-                                ) });
-
-                                break;
-                            },
-                        }
-                    }
-
-                    if (self.prec == .arg) {
-                        try writer.writeByte(')');
-                    }
-                },
+                .lam => |lam_data| try self.formatForAllLambda(writer, lam_data, true),
+                .forallE => |forall_data| try self.formatForAllLambda(writer, forall_data, false),
                 else => {
                     try writer.print("(TODO: {})", .{expr});
                 },
             }
         } else { // TODO: Fail here
             return;
+        }
+    }
+
+    fn formatForAllLambda(
+        self: ExprFormatter,
+        writer: *Writer,
+        data: anytype,
+        comptime is_lambda: bool,
+    ) Writer.Error!void {
+        if (self.prec == .arg) {
+            try writer.writeByte('(');
+        }
+
+        try writer.writeAll(if (is_lambda) "fun " else "∀ ");
+
+        try writeBinder(
+            fmtName(self.ctx, data.name),
+            fmtExpr(self.ctx, data.type, .free, self.names),
+            data.binderInfo,
+            writer,
+        );
+
+        var local_names: [64]usize = undefined;
+        var bound_count: usize = 0;
+        local_names[bound_count] = data.name;
+        bound_count += 1;
+
+        var body_idx = data.body;
+
+        while (self.ctx.exprs.items[body_idx]) |body_expr| {
+            const inner_opt = if (is_lambda)
+                switch (body_expr) {
+                    .lam => |d| d,
+                    else => null,
+                }
+            else switch (body_expr) {
+                .forallE => |d| d,
+                else => null,
+            };
+
+            const new_names: NamingEnv = .{
+                .local = local_names[0..bound_count],
+                .parent = self.names,
+            };
+
+            if (inner_opt) |inner_data| {
+                try writeBinder(
+                    fmtName(self.ctx, inner_data.name),
+                    fmtExpr(self.ctx, inner_data.type, .free, &new_names),
+                    inner_data.binderInfo,
+                    writer,
+                );
+                local_names[bound_count] = inner_data.name;
+                bound_count += 1;
+                body_idx = inner_data.body;
+            } else {
+                const sep = if (is_lambda) "=> " else ", ";
+                try writer.print("{s}{f}", .{
+                    sep,
+                    fmtExpr(self.ctx, body_idx, .free, &new_names),
+                });
+                break;
+            }
+        }
+
+        if (self.prec == .arg) {
+            try writer.writeByte(')');
         }
     }
 };
