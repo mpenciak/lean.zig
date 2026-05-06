@@ -92,7 +92,6 @@ pub fn fmtLevel(ctx: *Context, level_id: usize) LevelFormatter {
 
 pub const ExprFormatter = struct {
     ctx: *Context,
-    gpa: std.mem.Allocator,
     expr_id: usize,
 
     pub fn format(self: ExprFormatter, writer: *Writer) Writer.Error!void {
@@ -112,19 +111,10 @@ pub const ExprFormatter = struct {
                         try name.format(writer);
                         return;
                     }
-                    const levels: []LevelFormatter = blk: {
-                        var levels: std.ArrayList(LevelFormatter) = .empty;
-                        for (const_data.us) |u| {
-                            levels.append(self.gpa, fmtLevel(self.ctx, u)) catch return Writer.Error.WriteFailed;
-                        }
-                        const owned_levels = levels.toOwnedSlice(self.gpa) catch return Writer.Error.WriteFailed;
-                        break :blk owned_levels;
-                    };
-                    const level_formatter: CommaSepFormatter(LevelFormatter) = .init(levels);
-                    try writer.print("{[name]f}.{{{[levels]f}}}", .{ .name = name, .levels = level_formatter });
-                    self.gpa.free(levels);
-                },
 
+                    const level_list = fmtCommaSep(usize, fmtLevel, self.ctx, const_data.us);
+                    try writer.print("{[name]f}.{{{[levels]f}}}", .{ .name = name, .levels = level_list });
+                },
                 else => {
                     try writer.print("TODO: {}", .{expr});
                 },
@@ -135,26 +125,23 @@ pub const ExprFormatter = struct {
     }
 };
 
-pub fn fmtExpr(ctx: *Context, gpa: std.mem.Allocator, expr_id: usize) ExprFormatter {
-    return .{ .ctx = ctx, .gpa = gpa, .expr_id = expr_id };
+pub fn fmtExpr(ctx: *Context, expr_id: usize) ExprFormatter {
+    return .{ .ctx = ctx, .expr_id = expr_id };
 }
 
-pub fn CommaSepFormatter(T: type) type {
+pub fn CommaSepFormatter(comptime T: type, comptime fmt_fn: anytype) type {
     return struct {
-        items: []T,
-
-        pub fn init(data: []T) @This() {
-            return .{ .items = data };
-        }
+        ctx: *Context,
+        items: []const T,
 
         pub fn format(self: @This(), writer: *Writer) Writer.Error!void {
             if (self.items.len == 1) {
-                try self.items[0].format(writer);
+                try fmt_fn(self.ctx, self.items[0]).format(writer);
             } else if (self.items.len > 1) {
-                try self.items[0].format(writer);
+                try fmt_fn(self.ctx, self.items[0]).format(writer);
                 for (self.items[1..]) |item| {
                     try writer.writeAll(", ");
-                    try item.format(writer);
+                    try fmt_fn(self.ctx, item).format(writer);
                 }
             } else {
                 return;
@@ -163,17 +150,32 @@ pub fn CommaSepFormatter(T: type) type {
     };
 }
 
-pub fn SpaceSepFormatter(T: type) type {
-    return struct {
-        items: []T,
+pub fn fmtCommaSep(
+    comptime T: type,
+    comptime fmt_fn: anytype,
+    ctx: *Context,
+    items: []const T,
+) CommaSepFormatter(T, fmt_fn) {
+    return .{ .ctx = ctx, .items = items };
+}
 
-        pub fn init(data: []T) @This() {
-            return .{ .items = data };
-        }
+pub fn SpaceSepFormatter(comptime T: type, comptime fmt_fn: anytype) type {
+    return struct {
+        ctx: *Context,
+        items: []const T,
 
         pub fn format(self: @This(), writer: *Writer) Writer.Error!void {
-            _ = self;
-            try writer.writeAll("HAHAHAHAHAHAHA");
+            if (self.items.len == 1) {
+                try fmt_fn(self.ctx, self.items[0]).format(writer);
+            } else if (self.items.len > 1) {
+                try fmt_fn(self.ctx, self.items[0]).format(writer);
+                for (self.items[1..]) |item| {
+                    try writer.writeByte(' ');
+                    try fmt_fn(self.ctx, item).format(writer);
+                }
+            } else {
+                return;
+            }
         }
     };
 }
