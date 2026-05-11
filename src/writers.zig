@@ -291,6 +291,68 @@ pub fn fmtExpr(ctx: *Context, expr_id: usize, prec: Precedence, names: ?*const N
     };
 }
 
+pub const DeclFormatter = struct {
+    ctx: *Context,
+    decl_id: usize,
+
+    pub fn format(self: DeclFormatter, writer: *Writer) Writer.Error!void {
+        if (self.ctx.decls.items[self.decl_id]) |decl| {
+            switch (decl) {
+                .axiom => |data| try self.writeSig(writer, "axiom", data.name, data.levelParams, data.type),
+                .def => |data| {
+                    try self.writeSig(writer, "def", data.name, data.levelParams, data.type);
+                    try writer.print(" := {f}", .{fmtExpr(self.ctx, data.value, .free, null)});
+                },
+                .@"opaque" => |data| {
+                    try self.writeSig(writer, "opaque", data.name, data.levelParams, data.type);
+                    try writer.print(" := {f}", .{fmtExpr(self.ctx, data.value, .free, null)});
+                },
+                .thm => |data| {
+                    try self.writeSig(writer, "theorem", data.name, data.levelParams, data.type);
+                    try writer.print(" := {f}", .{fmtExpr(self.ctx, data.value, .free, null)});
+                },
+                .quot => |data| {
+                    // print them as displayed in the doc comments for the signatures
+                    try self.writeSig(writer, "opaque", data.name, data.levelParams, data.type);
+                },
+                else => |data| {
+                    try writer.print("(TODO {})", .{data});
+                },
+                // .inductive => |ind_data| {
+                //     _ = ind_data; // TODO
+                // },
+            }
+        }
+    }
+
+    fn writeSig(
+        self: DeclFormatter,
+        writer: *Writer,
+        keyword: []const u8,
+        name_id: usize,
+        levelParams: []const usize,
+        type_id: usize,
+    ) Writer.Error!void {
+        const name = fmtName(self.ctx, name_id);
+        const typ = fmtExpr(self.ctx, type_id, .free, null);
+        if (levelParams.len == 0) {
+            try writer.print("{s} {f} : {f}", .{ keyword, name, typ });
+        } else {
+            const params = fmtCommaSep(usize, fmtName, self.ctx, levelParams);
+            try writer.print("{[kw]s} {[name]f}.{{{[params]f}}} : {[typ]f}", .{
+                .kw = keyword,
+                .name = name,
+                .params = params,
+                .typ = typ,
+            });
+        }
+    }
+};
+
+pub fn fmtDecl(ctx: *Context, decl_id: usize) DeclFormatter {
+    return .{ .ctx = ctx, .decl_id = decl_id };
+}
+
 pub fn CommaSepFormatter(comptime T: type, comptime fmt_fn: anytype) type {
     return struct {
         ctx: *Context,

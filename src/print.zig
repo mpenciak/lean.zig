@@ -45,3 +45,19 @@ pub fn printExprs(ctx: *Context, io: std.Io) !void {
     }
     try writer.flush();
 }
+
+pub fn printDecls(ctx: *Context, io: std.Io) !void {
+    const stdout = std.Io.File.stdout();
+    var buffer: [4096]u8 = undefined;
+    var buffered = stdout.writer(io, &buffer);
+    const writer = &buffered.interface;
+
+    for (0..ctx.decls.items.len) |decl_id| {
+        try writers.fmtDecl(
+            ctx,
+            decl_id,
+        ).format(writer);
+        try writer.writeAll("\n");
+    }
+    try writer.flush();
+}

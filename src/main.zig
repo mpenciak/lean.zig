@@ -61,6 +61,9 @@ fn processFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     try writer.writeAll("\nPrinting exprs!\n-----------------\n");
     try writer.flush();
     try root.printers.printExprs(&context, io);
+    try writer.writeAll("\nPrinting decls!\n-----------------\n");
+    try writer.flush();
+    try root.printers.printDecls(&context, io);
 }
 
 fn parseLine(ctx_arena: std.mem.Allocator, gpa: std.mem.Allocator, context: *root.context.Context, line: []const u8) !void {
