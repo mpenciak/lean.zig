@@ -172,9 +172,28 @@ pub const ExprFormatter = struct {
                 },
                 .lam => |lam_data| try self.formatForAllLambda(writer, lam_data, true),
                 .forallE => |forall_data| try self.formatForAllLambda(writer, forall_data, false),
-                else => {
-                    try writer.print("(TODO: {})", .{expr});
+                .letE => |let_data| {
+                    const keyword = if (let_data.nondep) "let" else "have";
+                    const nameFmt = fmtName(self.ctx, let_data.name);
+                    const typeFmt = fmtExpr(self.ctx, let_data.type, .free, self.names);
+                    const valueFmt = fmtExpr(self.ctx, let_data.value, .free, self.names);
+                    const bodyFmt = fmtExpr(self.ctx, let_data.body, .free, self.names);
+
+                    try writer.print("{[keyword]s} {[name]f} : {[typ]f} := {[val]f}\n{[body]f}", .{
+                        .keyword = keyword,
+                        .name = nameFmt,
+                        .typ = typeFmt,
+                        .val = valueFmt,
+                        .body = bodyFmt,
+                    });
                 },
+                .proj => |proj_data| {
+                    const structfmt = fmtExpr(self.ctx, proj_data.@"struct", self.prec, self.names);
+                    try writer.print("{f}.{}", .{ structfmt, proj_data.idx }); // TODO: This is the best we can do for now
+                },
+                .natVal => |val| try writer.writeAll(val),
+                .strVal => |val| try writer.writeAll(val),
+                .mdata => |inner| try fmtExpr(self.ctx, inner.expr, self.prec, self.names).format(writer),
             }
         } else { // TODO: Fail here
             return;
