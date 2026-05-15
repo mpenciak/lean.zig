@@ -1,7 +1,10 @@
 const std = @import("std");
 const Writer = std.Io.Writer;
 
-const Context = @import("context.zig").Context;
+const context = @import("context.zig");
+const Context = context.Context;
+
+const Expr = @import("data.zig").Expr;
 const BinderInfo = @import("data.zig").BinderInfo;
 
 pub const NameFormatter = struct {
@@ -36,6 +39,10 @@ pub const NameFormatter = struct {
     }
 };
 
+pub fn fmtName(ctx: *Context, name_id: usize) NameFormatter {
+    return .{ .ctx = ctx, .name_id = name_id };
+}
+
 pub fn resolveNameAlloc(ctx: *Context, gpa: std.mem.Allocator, name_id: usize) ![]u8 {
     var buffer: Writer.Allocating = .init(gpa);
     errdefer buffer.deinit();
@@ -46,10 +53,6 @@ pub fn resolveNameAlloc(ctx: *Context, gpa: std.mem.Allocator, name_id: usize) !
     var array_list = buffer.toArrayList();
 
     return array_list.toOwnedSlice(gpa);
-}
-
-pub fn fmtName(ctx: *Context, name_id: usize) NameFormatter {
-    return .{ .ctx = ctx, .name_id = name_id };
 }
 
 pub const LevelFormatter = struct {
@@ -210,7 +213,21 @@ pub const ExprFormatter = struct {
             try writer.writeByte('(');
         }
 
-        try writer.writeAll(if (is_lambda) "fun " else "∀ ");
+        if (is_lambda) {
+            try writer.writeAll("fun ");
+        } else {
+            const forall_expr: Expr = .{ .forallE = data };
+
+            if (context.arrowLike(forall_expr, self.ctx) catch return Writer.Error.WriteFailed) {
+                const typeFmt = fmtExpr(self.ctx, data.type, .free, self.names);
+                const bodyFmt = fmtExpr(self.ctx, data.body, .free, self.names);
+                // TODO make this branch right
+                try writer.print("{f} -> {f}", .{ typeFmt, bodyFmt });
+                return;
+            } else {
+                try writer.writeAll("∀ ");
+            }
+        }
 
         try writeBinder(
             fmtName(self.ctx, data.name),
