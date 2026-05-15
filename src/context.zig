@@ -10,19 +10,19 @@ pub const Error = error{
 };
 
 pub const Context = struct {
-    names: std.ArrayList(?data.Name),
-    levels: std.ArrayList(?data.Level),
-    exprs: std.ArrayList(?data.Expr),
-    decls: std.ArrayList(?data.Decl),
+    names: std.ArrayList(data.Name),
+    levels: std.ArrayList(data.Level),
+    exprs: std.ArrayList(data.Expr),
+    decls: std.ArrayList(data.Decl),
     nameMap: std.StringHashMap(usize),
 
     pub fn init(allocator: std.mem.Allocator) !Context {
-        var names: std.ArrayList(?data.Name) = .empty;
-        try names.append(allocator, null);
-        var levels: std.ArrayList(?data.Level) = .empty;
-        try levels.append(allocator, null);
-        const exprs: std.ArrayList(?data.Expr) = .empty;
-        const decls: std.ArrayList(?data.Decl) = .empty;
+        var names: std.ArrayList(data.Name) = .empty;
+        try names.append(allocator, .root);
+        var levels: std.ArrayList(data.Level) = .empty;
+        try levels.append(allocator, .zero);
+        const exprs: std.ArrayList(data.Expr) = .empty;
+        const decls: std.ArrayList(data.Decl) = .empty;
         const nameMap: std.StringHashMap(usize) = .init(allocator);
 
         return Context{
@@ -51,6 +51,13 @@ pub const Context = struct {
             }
         }
     }
+    pub fn getExpr(self: *Context, id: usize) ?data.Expr {
+        if (id < self.exprs.items.len) {
+            return self.exprs.items[id];
+        } else {
+            return null;
+        }
+    }
 };
 
 pub fn containsBvar(bvar: usize, body: data.Expr, ctx: *Context) bool {
@@ -59,7 +66,7 @@ pub fn containsBvar(bvar: usize, body: data.Expr, ctx: *Context) bool {
             return bvar == bvar_idx;
         },
         .app => |app_data| {
-            const fn_expr = (ctx.getExpr(app_data.@"fn") catch return false).?;
+            const fn_expr = (ctx.getExpr(app_data.@"fn")).?;
             const arg_expr = ctx.getExpr(app_data.arg).?;
             return containsBvar(bvar, fn_expr, ctx) or containsBvar(bvar, arg_expr, ctx);
         },
@@ -92,10 +99,10 @@ pub fn containsBvar(bvar: usize, body: data.Expr, ctx: *Context) bool {
     }
 }
 
-pub fn arrowLike(expr: data.Expr, ctx: *Context) !bool {
+pub fn arrowLike(expr: data.Expr, ctx: *Context) bool {
     switch (expr) {
         .forallE => |forall_data| {
-            if (try ctx.getExpr(forall_data.body)) |body| {
+            if (ctx.getExpr(forall_data.body)) |body| {
                 return !containsBvar(0, body, ctx);
             } else {
                 return false;
@@ -105,19 +112,20 @@ pub fn arrowLike(expr: data.Expr, ctx: *Context) !bool {
     }
 }
 
-pub fn numLike(level_id: usize, ctx: *Context) !?usize {
-    if (level_id == 0) return 0;
+pub fn numLike(level_id: usize, ctx: *Context) ?usize {
+    var level_num: usize = 0;
+    var id = level_id;
 
-    const level = (try ctx.getLevel(level_id)).?;
-
-    switch (level) {
-        .succ => |inner| {
-            if (try ctx.getLevel(inner)) |inner_id| {
-                return numLike(inner_id, ctx);
-            } else {
-                return null;
-            }
-        },
-        else => return null,
+    while (true) {
+        switch (ctx.levels.items[id]) {
+            .zero => break,
+            .succ => |inner| {
+                id = inner;
+                level_num += 1;
+            },
+            else => return null,
+        }
     }
+
+    return level_num;
 }

@@ -12,29 +12,23 @@ pub const NameFormatter = struct {
     name_id: usize,
 
     pub fn format(self: NameFormatter, writer: *Writer) Writer.Error!void {
-        if (self.name_id == 0) {
-            try writer.writeAll("_root_");
-        }
-        const n_opt = self.ctx.names.items[self.name_id];
-        if (n_opt) |name| {
-            switch (name) {
-                .str => |s| {
-                    if (s.pre != 0) {
-                        try fmtName(self.ctx, s.pre).format(writer);
-                        try writer.writeByte('.');
-                    }
-                    try writer.writeAll(s.str);
-                },
-                .num => |n| {
-                    if (n.pre != 0) {
-                        try fmtName(self.ctx, n.pre).format(writer);
-                        try writer.writeByte('.');
-                    }
-                    try writer.print("{d}", .{n.i});
-                },
-            }
-        } else { // TODO: Fail here
-            return;
+        const name = self.ctx.names.items[self.name_id];
+        switch (name) {
+            .root => try writer.writeAll("_root_"),
+            .str => |s| {
+                if (s.pre != 0) {
+                    try fmtName(self.ctx, s.pre).format(writer);
+                    try writer.writeByte('.');
+                }
+                try writer.writeAll(s.str);
+            },
+            .num => |n| {
+                if (n.pre != 0) {
+                    try fmtName(self.ctx, n.pre).format(writer);
+                    try writer.writeByte('.');
+                }
+                try writer.print("{d}", .{n.i});
+            },
         }
     }
 };
@@ -60,32 +54,31 @@ pub const LevelFormatter = struct {
     level_id: usize,
 
     pub fn format(self: LevelFormatter, writer: *Writer) Writer.Error!void {
-        if (self.level_id == 0) {
-            try writer.writeByte('0');
-        }
-        const level_opt = self.ctx.levels.items[self.level_id];
-        if (level_opt) |level| {
-            switch (level) {
-                .param => |name_id| {
-                    try fmtName(self.ctx, name_id).format(writer);
-                },
-                .max => |lr| {
-                    const left_fmt = fmtLevel(self.ctx, lr[0]);
-                    const right_fmt = fmtLevel(self.ctx, lr[1]);
-                    try writer.print("max({f}, {f})", .{ left_fmt, right_fmt });
-                },
-                .imax => |lr| {
-                    const left_fmt = fmtLevel(self.ctx, lr[0]);
-                    const right_fmt = fmtLevel(self.ctx, lr[1]);
-                    try writer.print("imax({f}, {f})", .{ left_fmt, right_fmt });
-                },
-                .succ => |prev| {
-                    const prev_fmt = fmtLevel(self.ctx, prev);
-                    try writer.print("succ({f})", .{prev_fmt});
-                },
-            }
-        } else { // TODO: fail here
+        const level = self.ctx.levels.items[self.level_id];
+        if (context.numLike(self.level_id, self.ctx)) |univ| {
+            try writer.printInt(univ, 10, .lower, .{});
             return;
+        }
+
+        switch (level) {
+            .zero => try writer.writeByte('0'),
+            .param => |name_id| {
+                try fmtName(self.ctx, name_id).format(writer);
+            },
+            .max => |lr| {
+                const left_fmt = fmtLevel(self.ctx, lr[0]);
+                const right_fmt = fmtLevel(self.ctx, lr[1]);
+                try writer.print("max({f}, {f})", .{ left_fmt, right_fmt });
+            },
+            .imax => |lr| {
+                const left_fmt = fmtLevel(self.ctx, lr[0]);
+                const right_fmt = fmtLevel(self.ctx, lr[1]);
+                try writer.print("imax({f}, {f})", .{ left_fmt, right_fmt });
+            },
+            .succ => |prev| {
+                const prev_fmt = fmtLevel(self.ctx, prev);
+                try writer.print("succ({f})", .{prev_fmt});
+            },
         }
     }
 };
@@ -123,83 +116,88 @@ pub const ExprFormatter = struct {
     names: ?*const NamingEnv = null,
 
     pub fn format(self: ExprFormatter, writer: *Writer) Writer.Error!void {
-        const expr_opt = self.ctx.exprs.items[self.expr_id];
-
-        if (expr_opt) |expr| {
-            switch (expr) {
-                .bvar => |db_idx| {
-                    if (self.names) |name_ctx| {
-                        if (name_ctx.resolve(db_idx)) |name_idx| {
-                            try fmtName(self.ctx, name_idx).format(writer);
-                            return;
-                        }
-                    }
-                    // Fall back to de bruijn printing for free variables
-                    try writer.print("#{d}", .{db_idx});
-                },
-                .sort => |level_id| {
-                    try writer.print("Sort {f}", .{fmtLevel(self.ctx, level_id)});
-                },
-                .@"const" => |const_data| {
-                    const name = fmtName(self.ctx, const_data.name);
-                    if (const_data.us.len == 0) {
-                        try name.format(writer);
+        const expr = self.ctx.exprs.items[self.expr_id];
+        switch (expr) {
+            .bvar => |db_idx| {
+                if (self.names) |name_ctx| {
+                    if (name_ctx.resolve(db_idx)) |name_idx| {
+                        try fmtName(self.ctx, name_idx).format(writer);
                         return;
                     }
-
-                    const level_list = fmtCommaSep(usize, fmtLevel, self.ctx, const_data.us);
-                    try writer.print("{[name]f}.{{{[levels]f}}}", .{ .name = name, .levels = level_list });
-                },
-                .app => |app_data| {
-                    if (self.prec == .arg) {
-                        try writer.writeByte('(');
+                }
+                // Fall back to de bruijn printing for free variables
+                try writer.print("#{d}", .{db_idx});
+            },
+            .sort => |level_id| {
+                if (context.numLike(level_id, self.ctx)) |univ| {
+                    if (univ == 0) {
+                        try writer.writeAll("Prop");
+                    } else if (univ == 1) {
+                        try writer.writeAll("Type");
+                    } else {
+                        try writer.print("Type {d}", .{univ - 1});
                     }
-                    const fn_part = fmtExpr(
-                        self.ctx,
-                        app_data.@"fn",
-                        .free,
-                        self.names,
-                    );
-                    const arg_part = fmtExpr(
-                        self.ctx,
-                        app_data.arg,
-                        .arg,
-                        self.names,
-                    );
+                    return;
+                }
+                try writer.print("Sort {f}", .{fmtLevel(self.ctx, level_id)});
+            },
+            .@"const" => |const_data| {
+                const name = fmtName(self.ctx, const_data.name);
+                if (const_data.us.len == 0) {
+                    try name.format(writer);
+                    return;
+                }
 
-                    try writer.print("{[fn_part]f} {[arg_part]f}", .{ .fn_part = fn_part, .arg_part = arg_part });
+                const level_list = fmtCommaSep(usize, fmtLevel, self.ctx, const_data.us);
+                try writer.print("{[name]f}.{{{[levels]f}}}", .{ .name = name, .levels = level_list });
+            },
+            .app => |app_data| {
+                if (self.prec == .arg) {
+                    try writer.writeByte('(');
+                }
+                const fn_part = fmtExpr(
+                    self.ctx,
+                    app_data.@"fn",
+                    .free,
+                    self.names,
+                );
+                const arg_part = fmtExpr(
+                    self.ctx,
+                    app_data.arg,
+                    .arg,
+                    self.names,
+                );
 
-                    if (self.prec == .arg) {
-                        try writer.writeByte(')');
-                    }
-                },
-                .lam => |lam_data| try self.formatForAllLambda(writer, lam_data, true),
-                .forallE => |forall_data| try self.formatForAllLambda(writer, forall_data, false),
-                .letE => |let_data| {
-                    const keyword = if (let_data.nondep) "let" else "have";
-                    const nameFmt = fmtName(self.ctx, let_data.name);
-                    const typeFmt = fmtExpr(self.ctx, let_data.type, .free, self.names);
-                    const valueFmt = fmtExpr(self.ctx, let_data.value, .free, self.names);
-                    const bodyFmt = fmtExpr(self.ctx, let_data.body, .free, self.names);
+                try writer.print("{[fn_part]f} {[arg_part]f}", .{ .fn_part = fn_part, .arg_part = arg_part });
 
-                    try writer.print("{[keyword]s} {[name]f} : {[typ]f} := {[val]f}\n{[body]f}", .{
-                        .keyword = keyword,
-                        .name = nameFmt,
-                        .typ = typeFmt,
-                        .val = valueFmt,
-                        .body = bodyFmt,
-                    });
-                },
-                .proj => |proj_data| {
-                    const structfmt = fmtExpr(self.ctx, proj_data.@"struct", self.prec, self.names);
-                    try writer.print("{f}.{}", .{ structfmt, proj_data.idx }); // TODO: This is the best we can do for now
-                },
-                .natVal => |val| try writer.writeAll(val),
-                .strVal => |val| try writer.writeAll(val),
-                .mdata => |inner| try fmtExpr(self.ctx, inner.expr, self.prec, self.names).format(writer),
-            }
-        } else { // TODO: Fail here
-            return;
+                if (self.prec == .arg) {
+                    try writer.writeByte(')');
+                }
+            },
+            .lam => |lam_data| try self.formatForAllLambda(writer, lam_data, true),
+            .forallE => |forall_data| try self.formatForAllLambda(writer, forall_data, false),
+            .letE => |let_data| {
+                const keyword = if (let_data.nondep) "let" else "have";
+                const nameFmt = fmtName(self.ctx, let_data.name);
+                const typeFmt = fmtExpr(self.ctx, let_data.type, .free, self.names);
+                const valueFmt = fmtExpr(self.ctx, let_data.value, .free, self.names);
+                const bodyFmt = fmtExpr(self.ctx, let_data.body, .free, self.names);
+
+                try writer.print("{[keyword]s} {[name]f} : {[typ]f} := {[val]f}\n{[body]f}", .{
+                    .keyword = keyword,
+                    .name = nameFmt,
+                    .typ = typeFmt,
+                    .val = valueFmt,
+                    .body = bodyFmt,
+                });
+            },
+            .proj => |proj_data| {
+                const structfmt = fmtExpr(self.ctx, proj_data.@"struct", self.prec, self.names);
+                try writer.print("{f}.{}", .{ structfmt, proj_data.idx }); // TODO: This is the best we can do for now
+            },
+            .natVal => |val| try writer.writeAll(val),
+            .strVal => |val| try writer.writeAll(val),
+            .mdata => |inner| try fmtExpr(self.ctx, inner.expr, self.prec, self.names).format(writer),
         }
     }
 
@@ -218,7 +216,7 @@ pub const ExprFormatter = struct {
         } else {
             const forall_expr: Expr = .{ .forallE = data };
 
-            if (context.arrowLike(forall_expr, self.ctx) catch return Writer.Error.WriteFailed) {
+            if (context.arrowLike(forall_expr, self.ctx)) {
                 const typeFmt = fmtExpr(self.ctx, data.type, .free, self.names);
                 const bodyFmt = fmtExpr(self.ctx, data.body, .free, self.names);
                 // TODO make this branch right
@@ -236,6 +234,8 @@ pub const ExprFormatter = struct {
             writer,
         );
 
+        // TODO: Assumes names are < 64 long,
+        // should come back to this
         var local_names: [64]usize = undefined;
         var bound_count: usize = 0;
         local_names[bound_count] = data.name;
@@ -243,7 +243,8 @@ pub const ExprFormatter = struct {
 
         var body_idx = data.body;
 
-        while (self.ctx.exprs.items[body_idx]) |body_expr| {
+        while (true) {
+            const body_expr = self.ctx.exprs.items[body_idx];
             const inner_opt = if (is_lambda)
                 switch (body_expr) {
                     .lam => |d| d,
@@ -313,32 +314,32 @@ pub const DeclFormatter = struct {
     decl_id: usize,
 
     pub fn format(self: DeclFormatter, writer: *Writer) Writer.Error!void {
-        if (self.ctx.decls.items[self.decl_id]) |decl| {
-            switch (decl) {
-                .axiom => |data| try self.writeSig(writer, "axiom", data.name, data.levelParams, data.type),
-                .def => |data| {
-                    try self.writeSig(writer, "def", data.name, data.levelParams, data.type);
-                    try writer.print(" := {f}", .{fmtExpr(self.ctx, data.value, .free, null)});
-                },
-                .@"opaque" => |data| {
-                    try self.writeSig(writer, "opaque", data.name, data.levelParams, data.type);
-                    try writer.print(" := {f}", .{fmtExpr(self.ctx, data.value, .free, null)});
-                },
-                .thm => |data| {
-                    try self.writeSig(writer, "theorem", data.name, data.levelParams, data.type);
-                    try writer.print(" := {f}", .{fmtExpr(self.ctx, data.value, .free, null)});
-                },
-                .quot => |data| {
-                    // print them as displayed in the doc comments for the signatures
-                    try self.writeSig(writer, "opaque", data.name, data.levelParams, data.type);
-                },
-                else => |data| {
-                    try writer.print("(TODO {})", .{data});
-                },
-                // .inductive => |ind_data| {
-                //     _ = ind_data; // TODO
-                // },
-            }
+        const decl = self.ctx.decls.items[self.decl_id];
+
+        switch (decl) {
+            .axiom => |data| try self.writeSig(writer, "axiom", data.name, data.levelParams, data.type),
+            .def => |data| {
+                try self.writeSig(writer, "def", data.name, data.levelParams, data.type);
+                try writer.print(" := {f}", .{fmtExpr(self.ctx, data.value, .free, null)});
+            },
+            .@"opaque" => |data| {
+                try self.writeSig(writer, "opaque", data.name, data.levelParams, data.type);
+                try writer.print(" := {f}", .{fmtExpr(self.ctx, data.value, .free, null)});
+            },
+            .thm => |data| {
+                try self.writeSig(writer, "theorem", data.name, data.levelParams, data.type);
+                try writer.print(" := {f}", .{fmtExpr(self.ctx, data.value, .free, null)});
+            },
+            .quot => |data| {
+                // print them as displayed in the doc comments for the signatures
+                try self.writeSig(writer, "opaque", data.name, data.levelParams, data.type);
+            },
+            else => |data| {
+                try writer.print("(TODO {})", .{data});
+            },
+            // .inductive => |ind_data| {
+            //     _ = ind_data; // TODO
+            // },
         }
     }
 

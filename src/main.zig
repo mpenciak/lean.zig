@@ -97,13 +97,8 @@ fn handleKind(comptime line_kind: root.parser.LineKind, arena: std.mem.Allocator
     if (index_name) |idx_name| {
         const index: usize = @intCast(obj.object.get(idx_name).?.integer);
         const len: usize = @field(context, ctx_field_name).items.len;
-        if (len == index) {
-            try @field(context, ctx_field_name).append(arena, item);
-        } else if (index < len) {
-            @field(context, ctx_field_name).items[index] = item;
-        } else {
-            try @field(context, ctx_field_name).appendNTimes(arena, null, len - index);
-        }
+        std.debug.assert(len == index);
+        try @field(context, ctx_field_name).append(arena, item);
     } else {
         try @field(context, ctx_field_name).append(arena, item);
     }

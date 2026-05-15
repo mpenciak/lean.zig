@@ -44,6 +44,8 @@ fn WrappedTag(T: type, comptime tag: []const u8) type {
 
 /// This is the `Name` data structure we'll use outside of the context of parsing
 pub const Name = union(enum) {
+    // NOTE: not in the export format, but is the root name
+    root,
     // { "num": { "pre": integer, "i": integer } "in": integer, }
     num: struct { pre: usize, i: usize },
     // { "str": { "pre": integer, "str": string }, "in": integer, }
@@ -63,6 +65,9 @@ pub const IndexedStrName = IndexedTag(Name, "str", "in");
 
 /// This is the `Level` data structure we'll use outside of the context of parsing
 pub const Level = union(enum) {
+    // NOTE: not in the export format, but is the root level
+    zero,
+
     // { "succ": integer "il": integer, }
     succ: usize,
 
