@@ -4,8 +4,13 @@ const Writer = std.Io.Writer;
 const context = @import("context.zig");
 const Context = context.Context;
 
-const Expr = @import("data.zig").Expr;
-const BinderInfo = @import("data.zig").BinderInfo;
+const data_import = @import("data.zig");
+const Expr = data_import.Expr;
+const BinderInfo = data_import.BinderInfo;
+const Inductive = data_import.Inductive;
+const InductiveVal = data_import.InductiveVal;
+const ConstructorVal = data_import.ConstructorVal;
+const RecursorVal = data_import.RecursorVal;
 
 pub const NameFormatter = struct {
     ctx: *Context,
@@ -139,7 +144,13 @@ pub const ExprFormatter = struct {
                     }
                     return;
                 }
-                try writer.print("Sort {f}", .{fmtLevel(self.ctx, level_id)});
+
+                if (self.ctx.levels.items[level_id] == .succ) {
+                    const inner_id = self.ctx.levels.items[level_id].succ;
+                    try writer.print("Type {f}", .{fmtLevel(self.ctx, inner_id)});
+                } else {
+                    try writer.print("Type {f}", .{fmtLevel(self.ctx, level_id)});
+                }
             },
             .@"const" => |const_data| {
                 const name = fmtName(self.ctx, const_data.name);
@@ -353,14 +364,87 @@ pub const DeclFormatter = struct {
                 // Quotient declarations are surfaced as `opaque` since they have no body.
                 try self.writeSig(writer, "opaque", data.name, data.levelParams, data.type, null);
             },
-            else => |data| {
-                try writer.print("(TODO {})", .{data});
+            .inductive => |ind_data| {
+                const is_mutual = ind_data.types.len > 1;
+
+                if (is_mutual) try writer.writeAll("mutual\n");
+
+                var ctor_idx: usize = 0;
+                for (ind_data.types) |ind_val| {
+                    try self.writeIndSig(writer, &ind_val);
+                    for (0..ind_val.ctors.len) |inner_idx| {
+                        const ctor_val = ind_data.ctors[ctor_idx];
+                        std.debug.assert(ctor_val.cidx == inner_idx);
+                        try self.writeCtor(writer, &ctor_val);
+                        ctor_idx += 1;
+                    }
+                }
+
+                if (is_mutual) try writer.writeAll("end\n");
             },
-            // .inductive => |ind_data| {
-            //     _ = ind_data; // TODO
-            // },
         }
     }
+
+    fn writeIndSig(
+        self: DeclFormatter,
+        writer: *Writer,
+        ind_val: *const InductiveVal,
+    ) Writer.Error!void {
+        const name_fmt = fmtName(self.ctx, ind_val.name);
+        try writer.print("inductive {f}", .{name_fmt});
+        if (ind_val.levelParams.len > 0) {
+            const level_fmt = fmtCommaSep(usize, fmtName, self.ctx, ind_val.levelParams);
+            try writer.print(".{{{f}}}", .{level_fmt});
+        }
+        try writer.writeByte(' ');
+
+        std.debug.assert(ind_val.numParams + ind_val.numIndices < 64);
+        var name_data: [64]usize = undefined;
+        var tp_idx = ind_val.type;
+        var tp = self.ctx.getExpr(tp_idx).?;
+
+        // This is where we write the params
+        for (0..ind_val.numParams) |binder_idx| {
+            name_data[binder_idx] = tp.forallE.name;
+            const name_env: NamingEnv = .{ .local = name_data[0..binder_idx], .parent = null };
+            try writeBinder(
+                fmtName(self.ctx, tp.forallE.name),
+                fmtExpr(self.ctx, tp.forallE.type, .free, &name_env),
+                tp.forallE.binderInfo,
+                writer,
+            );
+
+            tp_idx = tp.forallE.body;
+            tp = self.ctx.getExpr(tp_idx).?;
+        }
+
+        try writer.writeAll(": ");
+
+        const name_env: NamingEnv = .{ .local = name_data[0..ind_val.numParams], .parent = null };
+        // This is where we write the indices
+        for (ind_val.numParams..ind_val.numParams + ind_val.numIndices) |_| {
+            const fmt_expr = fmtExpr(self.ctx, tp.forallE.type, .free, &name_env);
+
+            try writer.print("{f} -> ", .{fmt_expr});
+            tp_idx = tp.forallE.body;
+            tp = self.ctx.getExpr(tp_idx).?;
+        }
+
+        try fmtExpr(self.ctx, tp_idx, .free, &name_env).format(writer);
+        try writer.writeAll("\n");
+    }
+
+    fn writeCtor(self: DeclFormatter, writer: *Writer, ctor_val: *const ConstructorVal) Writer.Error!void {
+        try self.writeSig(writer, "|", ctor_val.name, ctor_val.levelParams, ctor_val.type, null);
+    }
+
+    // TODO: We already have the recursors in the environment, so maybe we don't need to print them
+    //       (but we will typecheck them?)
+    // fn writeRec(self: DeclFormatter, ind_data: *const Inductive, rec_val: *const RecursorVal) Writer.Error!void {
+    //     _ = self;
+    //     _ = ind_data;
+    //     _ = rec_val;
+    // }
 
     fn writeSig(
         self: DeclFormatter,
