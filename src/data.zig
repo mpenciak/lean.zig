@@ -112,20 +112,10 @@ pub const Expr = union(enum) {
     },
 
     // { "lam": { "name": integer, "type": integer, "body": integer, "binderInfo": ... }, "ie": integer, }
-    lam: struct {
-        name: usize,
-        type: usize,
-        body: usize,
-        binderInfo: BinderInfo,
-    },
+    lam: ForallLamData,
 
     // { "forallE": { "name": integer, "type": integer, "body": integer, "binderInfo": ... }, "ie": integer, }
-    forallE: struct {
-        name: usize,
-        type: usize,
-        body: usize,
-        binderInfo: BinderInfo,
-    },
+    forallE: ForallLamData,
 
     // { "letE": { "name": integer, "type": integer, "value": integer, "body": integer, "nondep": boolean }, "ie": integer, }
     letE: struct {
@@ -154,6 +144,21 @@ pub const Expr = union(enum) {
         expr: usize,
         // TODO: I need to add a `data` object
     },
+
+    pub fn forallLamPayload(self: Expr) ?ForallLamData {
+        switch (self) {
+            .lam => |data| return data,
+            .forallE => |data| return data,
+            else => return null,
+        }
+    }
+};
+
+pub const ForallLamData = struct {
+    name: usize,
+    type: usize,
+    body: usize,
+    binderInfo: BinderInfo,
 };
 
 pub const BinderInfo = enum {

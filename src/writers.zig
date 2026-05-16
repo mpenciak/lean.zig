@@ -317,22 +317,41 @@ pub const DeclFormatter = struct {
         const decl = self.ctx.decls.items[self.decl_id];
 
         switch (decl) {
-            .axiom => |data| try self.writeSig(writer, "axiom", data.name, data.levelParams, data.type),
+            .axiom => |data| {
+                if (data.isUnsafe) {
+                    try writer.writeAll("unsafe ");
+                }
+                try writer.writeAll("axiom ");
+                try fmtName(self.ctx, data.name).format(writer);
+                if (data.levelParams.len > 0) {
+                    try writer.writeAll(".{");
+                    try fmtCommaSep(usize, fmtName, self.ctx, data.levelParams).format(writer);
+                    try writer.writeByte('}');
+                }
+
+                try writer.writeAll(" : ");
+
+                try fmtExpr(self.ctx, data.type, .free, null).format(writer);
+            },
             .def => |data| {
-                try self.writeSig(writer, "def", data.name, data.levelParams, data.type);
-                try writer.print(" := {f}", .{fmtExpr(self.ctx, data.value, .free, null)});
+                switch (data.safety) {
+                    .unsafe => try writer.writeAll("unsafe "),
+                    .partial => try writer.writeAll("partial "),
+                    .safe => {},
+                }
+                const keyword = if (data.hints == .abbrev) "abbrev" else "def";
+                try self.writeSig(writer, keyword, data.name, data.levelParams, data.type, data.value);
             },
             .@"opaque" => |data| {
-                try self.writeSig(writer, "opaque", data.name, data.levelParams, data.type);
-                try writer.print(" := {f}", .{fmtExpr(self.ctx, data.value, .free, null)});
+                if (data.isUnsafe) try writer.writeAll("unsafe ");
+                try self.writeSig(writer, "opaque", data.name, data.levelParams, data.type, data.value);
             },
             .thm => |data| {
-                try self.writeSig(writer, "theorem", data.name, data.levelParams, data.type);
-                try writer.print(" := {f}", .{fmtExpr(self.ctx, data.value, .free, null)});
+                try self.writeSig(writer, "theorem", data.name, data.levelParams, data.type, data.value);
             },
             .quot => |data| {
-                // print them as displayed in the doc comments for the signatures
-                try self.writeSig(writer, "opaque", data.name, data.levelParams, data.type);
+                // Quotient declarations are surfaced as `opaque` since they have no body.
+                try self.writeSig(writer, "opaque", data.name, data.levelParams, data.type, null);
             },
             else => |data| {
                 try writer.print("(TODO {})", .{data});
@@ -350,19 +369,45 @@ pub const DeclFormatter = struct {
         name_id: usize,
         levelParams: []const usize,
         type_id: usize,
+        value_id: ?usize,
     ) Writer.Error!void {
-        const name = fmtName(self.ctx, name_id);
-        const typ = fmtExpr(self.ctx, type_id, .free, null);
-        if (levelParams.len == 0) {
-            try writer.print("{s} {f} : {f}", .{ keyword, name, typ });
-        } else {
-            const params = fmtCommaSep(usize, fmtName, self.ctx, levelParams);
-            try writer.print("{[kw]s} {[name]f}.{{{[params]f}}} : {[typ]f}", .{
-                .kw = keyword,
-                .name = name,
-                .params = params,
-                .typ = typ,
-            });
+        try writer.print("{s} {f}", .{ keyword, fmtName(self.ctx, name_id) });
+        if (levelParams.len > 0) {
+            try writer.print(".{{{f}}}", .{fmtCommaSep(usize, fmtName, self.ctx, levelParams)});
+        }
+        try writer.writeByte(' ');
+
+        var local_names: [64]usize = undefined;
+        var num_binders: usize = 0;
+        var tp_idx = type_id;
+        var tp = self.ctx.getExpr(tp_idx).?;
+
+        while (tp.forallLamPayload()) |inner_data| {
+            const name_env: NamingEnv = .{ .local = local_names[0..num_binders], .parent = null };
+            try writeBinder(
+                fmtName(self.ctx, inner_data.name),
+                fmtExpr(self.ctx, inner_data.type, .free, &name_env),
+                inner_data.binderInfo,
+                writer,
+            );
+
+            local_names[num_binders] = inner_data.name;
+            num_binders += 1;
+
+            tp_idx = inner_data.body;
+            tp = self.ctx.getExpr(tp_idx).?;
+        }
+
+        const name_env: NamingEnv = .{ .local = local_names[0..num_binders], .parent = null };
+
+        try writer.print(": {f}", .{fmtExpr(self.ctx, tp_idx, .free, &name_env)});
+
+        if (value_id) |v| {
+            var value = v;
+            while (self.ctx.getExpr(value).? == .lam) {
+                value = self.ctx.getExpr(value).?.lam.body;
+            }
+            try writer.print(" := {f}", .{fmtExpr(self.ctx, value, .free, &name_env)});
         }
     }
 };
