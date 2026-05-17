@@ -2,25 +2,24 @@
 
 ## What it can do
 - Parse the lean4export format
+- Print Decls
 
 ## TODOs
 
 ### Next steps
-- Print exprs
+- de Bruijn utilities
+- CLI for printing
+- Expand testing corpus
+- Documentation
 
 ### Fixes
 - Mdata should be ignored
-- Write numeric levels correctly (i.e. succ(0) should be 1)
-- Parenthesize correctly
 
 ### Perf
 - Cached name resolution
 
 ### Nice-to-haves
-- Expand testing corpus
 - Improve errors?
-- Documentation
 
 ### Long-term
-- More CLI options?
 - A TUI?

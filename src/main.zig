@@ -52,15 +52,15 @@ fn processFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var buffered = std.Io.File.stdout().writer(io, &buffer);
     const writer = &buffered.interface;
 
-    try writer.writeAll("\nPrinting names!\n-----------------\n");
-    try writer.flush();
-    try root.printers.printNames(&context, io);
-    try writer.writeAll("\nPrinting levels!\n----------------\n");
-    try writer.flush();
-    try root.printers.printLevels(&context, io);
-    try writer.writeAll("\nPrinting exprs!\n-----------------\n");
-    try writer.flush();
-    try root.printers.printExprs(&context, io);
+    // try writer.writeAll("\nPrinting names!\n-----------------\n");
+    // try writer.flush();
+    // try root.printers.printNames(&context, io);
+    // try writer.writeAll("\nPrinting levels!\n----------------\n");
+    // try writer.flush();
+    // try root.printers.printLevels(&context, io);
+    // try writer.writeAll("\nPrinting exprs!\n-----------------\n");
+    // try writer.flush();
+    // try root.printers.printExprs(&context, io);
     try writer.writeAll("\nPrinting decls!\n-----------------\n");
     try writer.flush();
     try root.printers.printDecls(&context, io);

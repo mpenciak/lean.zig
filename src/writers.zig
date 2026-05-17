@@ -431,11 +431,10 @@ pub const DeclFormatter = struct {
         }
 
         try fmtExpr(self.ctx, tp_idx, .free, &name_env).format(writer);
-        try writer.writeAll("\n");
     }
 
     fn writeCtor(self: DeclFormatter, writer: *Writer, ctor_val: *const ConstructorVal) Writer.Error!void {
-        try self.writeSig(writer, "|", ctor_val.name, ctor_val.levelParams, ctor_val.type, null);
+        try self.writeSig(writer, "\n|", ctor_val.name, ctor_val.levelParams, ctor_val.type, null);
     }
 
     // TODO: We already have the recursors in the environment, so maybe we don't need to print them

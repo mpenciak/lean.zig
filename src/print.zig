@@ -57,7 +57,7 @@ pub fn printDecls(ctx: *Context, io: std.Io) !void {
             ctx,
             decl_id,
         ).format(writer);
-        try writer.writeAll("\n");
+        try writer.writeAll("\n\n");
     }
     try writer.flush();
 }
